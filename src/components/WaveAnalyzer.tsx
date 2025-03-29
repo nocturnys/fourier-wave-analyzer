@@ -8,10 +8,6 @@ import {
   generateTriangleWave, 
   WavePoint 
 } from '@/utils/waveGenerators';
-import {
-  getIdealWaveGenerator,
-  clearWaveCache
-} from '@/utils/idealWaveGenerators';
 import { 
   calculateFourierCoefficients, 
   reconstructWaveFromFourier, 
@@ -22,9 +18,10 @@ import {
 } from '@/utils/fourierTransform';
 import { createAudioBufferFromWave, playAudioBuffer } from '@/utils/audioUtils';
 import { WAVE_TYPES, SAMPLE_RATE, MAX_AMPLITUDE, DEFAULT_DURATION } from '@/constants/audioConstants';
-import WaveChart from '@/components/common/WaveChart';
-import SpectrumChart from '@/components/common/SpectrumChart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell 
+} from 'recharts';
 
 // Cache for reconstructions
 const reconstructionCache = new Map<string, WavePoint[]>();
@@ -61,7 +58,6 @@ const WaveAnalyzer: React.FC = () => {
   
   // State for analysis data
   const [waveData, setWaveData] = useState<WavePoint[]>([]);
-  const [idealWaveData, setIdealWaveData] = useState<WavePoint[]>([]);
   const [reconstructedWave, setReconstructedWave] = useState<WavePoint[]>([]);
   const [fourierCoefficients, setFourierCoefficients] = useState<FourierCoefficients>({ 
     a0: 0, 
@@ -74,37 +70,71 @@ const WaveAnalyzer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   
-  // State for showing accuracy trends
-  const [accuracyData, setAccuracyData] = useState<Array<{harmonics: number, accuracy: number}>>([]);
+  // State for showing enhanced spectral visualization
   const [useLogScale, setUseLogScale] = useState<boolean>(false);
   
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   
-  // Combined data for dynamic visualization
+  // Combined data for dynamic visualization with precise time alignment
   const combinedWaveData = useMemo(() => {
-    // Create a combined dataset with original, ideal and reconstructed waves
-    if (!waveData.length) return [];
+    // Create a combined dataset with original and reconstructed waves
+    if (!waveData.length || !reconstructedWave.length) return [];
     
-    const maxPoints = 500; // Limit data points for performance
-    const step = Math.max(1, Math.floor(waveData.length / maxPoints));
+    // Create a unified time grid to ensure perfect alignment
+    const startTime = 0;
+    const endTime = duration;
+    const maxPoints = 1000; // Higher resolution for smoother curves
+    const timeStep = (endTime - startTime) / maxPoints;
     
-    return waveData
-      .filter((_, index) => index % step === 0)
-      .map(point => {
-        // Find matching points in ideal and reconstructed waves
-        const idealPoint = idealWaveData.find(p => Math.abs(p.t - point.t) < 0.0001);
-        const reconPoint = reconstructedWave.find(p => Math.abs(p.t - point.t) < 0.0001);
-        
-        return {
-          t: point.t,
-          original: point.value,
-          ideal: idealPoint?.value || null,
-          reconstructed: reconPoint?.value || null
-        };
+    const result = [];
+    
+    // Use interpolation to sample both waves at exactly the same time points
+    for (let i = 0; i <= maxPoints; i++) {
+      const t = startTime + i * timeStep;
+      
+      // Find nearest points in original data
+      const origIndex = waveData.findIndex(p => p.t >= t);
+      let originalValue = null;
+      
+      if (origIndex > 0) {
+        // Linear interpolation between points for smoother rendering
+        const p1 = waveData[origIndex - 1];
+        const p2 = waveData[origIndex];
+        const factor = (t - p1.t) / (p2.t - p1.t);
+        originalValue = p1.value + factor * (p2.value - p1.value);
+      } else if (origIndex === 0) {
+        originalValue = waveData[0].value;
+      } else if (origIndex === -1 && waveData.length > 0) {
+        originalValue = waveData[waveData.length - 1].value;
+      }
+      
+      // Find nearest points in reconstructed data
+      const reconIndex = reconstructedWave.findIndex(p => p.t >= t);
+      let reconstructedValue = null;
+      
+      if (reconIndex > 0) {
+        // Linear interpolation between points
+        const p1 = reconstructedWave[reconIndex - 1];
+        const p2 = reconstructedWave[reconIndex];
+        const factor = (t - p1.t) / (p2.t - p1.t);
+        reconstructedValue = p1.value + factor * (p2.value - p1.value);
+      } else if (reconIndex === 0) {
+        reconstructedValue = reconstructedWave[0].value;
+      } else if (reconIndex === -1 && reconstructedWave.length > 0) {
+        reconstructedValue = reconstructedWave[reconstructedWave.length - 1].value;
+      }
+      
+      result.push({
+        t,
+        original: originalValue,
+        reconstructed: reconstructedValue
       });
-  }, [waveData, idealWaveData, reconstructedWave]);
+    }
+    
+    return result;
+  }, [waveData, reconstructedWave, duration]);
   
   // Get explanation text for current wave type
   const waveExplanation = useMemo(() => {
@@ -158,16 +188,6 @@ const WaveAnalyzer: React.FC = () => {
     
     setWaveData(data);
     
-    // Generate ideal wave if needed
-    if (waveType !== WAVE_TYPES.SINE) {
-      const idealWaveGenerator = getIdealWaveGenerator(waveType);
-      const idealData = idealWaveGenerator(frequency, amplitude, duration);
-      setIdealWaveData(idealData);
-    } else {
-      // For sine wave, the ideal is the same as the original
-      setIdealWaveData([]);
-    }
-    
     // Calculate Fourier coefficients
     const coefficients = calculateFourierCoefficients(data, 50);
     setFourierCoefficients(coefficients);
@@ -179,8 +199,6 @@ const WaveAnalyzer: React.FC = () => {
     const spectral = prepareSpectralData(coefficients, frequency);
     setSpectralData(spectral);
     
-    // Calculate accuracy trend
-    calculateAccuracyTrend(data, coefficients, duration, frequency);
   }, [waveType, frequency, amplitude, duration, numHarmonics]);
   
   // Update reconstructed wave when harmonic count changes
@@ -212,125 +230,6 @@ const WaveAnalyzer: React.FC = () => {
     setReconstructedWave(reconstructed);
   }, [duration, frequency]);
   
-  // Generate accuracy trend data
-  const calculateAccuracyTrend = useCallback((
-    originalData: WavePoint[],
-    coefficients: FourierCoefficients,
-    waveDuration: number,
-    waveFrequency: number
-  ) => {
-    const maxHarmonicsToShow = 50;
-    const step = 2;
-    const accuracyPoints: Array<{harmonics: number, accuracy: number}> = [];
-    
-    // Process in batches to avoid blocking UI
-    const processHarmonics = (start: number, end: number) => {
-      for (let h = start; h <= end; h += step) {
-        const key = createReconstructionCacheKey(
-          coefficients, waveDuration, waveFrequency, h
-        );
-        
-        let reconstructed: WavePoint[];
-        if (reconstructionCache.has(key)) {
-          reconstructed = reconstructionCache.get(key)!;
-        } else {
-          reconstructed = reconstructWaveFromFourier(
-            coefficients, waveDuration, waveFrequency, h
-          );
-          reconstructionCache.set(key, reconstructed);
-        }
-        
-        const accuracy = calculateReconstructionAccuracy(originalData, reconstructed);
-        
-        // Ensure accuracy doesn't decrease
-        const lastIndex = accuracyPoints.length - 1;
-        const lastAccuracy = lastIndex >= 0 ? accuracyPoints[lastIndex].accuracy : 0;
-        const correctedAccuracy = Math.max(lastAccuracy, accuracy.accuracyPercent);
-        
-        accuracyPoints.push({
-          harmonics: h,
-          accuracy: correctedAccuracy
-        });
-      }
-      
-      // Process next batch or finalize
-      if (end < maxHarmonicsToShow) {
-        setTimeout(() => {
-          processHarmonics(end + step, Math.min(end + 10, maxHarmonicsToShow));
-        }, 0);
-      } else {
-        finishProcessing();
-      }
-    };
-    
-    // Start processing
-    processHarmonics(1, 10);
-    
-    // Final processing steps
-    const finishProcessing = () => {
-      // Add current harmonic count if not already included
-      if (!accuracyPoints.some(p => p.harmonics === numHarmonics)) {
-        const cacheKey = createReconstructionCacheKey(
-          coefficients, waveDuration, waveFrequency, numHarmonics
-        );
-        
-        let reconstructed: WavePoint[];
-        if (reconstructionCache.has(cacheKey)) {
-          reconstructed = reconstructionCache.get(cacheKey)!;
-        } else {
-          reconstructed = reconstructWaveFromFourier(
-            coefficients, waveDuration, waveFrequency, numHarmonics
-          );
-          reconstructionCache.set(cacheKey, reconstructed);
-        }
-        
-        const accuracy = calculateReconstructionAccuracy(originalData, reconstructed);
-        
-        // Find the right position
-        let insertIndex = 0;
-        while (insertIndex < accuracyPoints.length && 
-               accuracyPoints[insertIndex].harmonics < numHarmonics) {
-          insertIndex++;
-        }
-        
-        // Ensure monotonic increase in accuracy
-        const prevAccuracy = insertIndex > 0 ? accuracyPoints[insertIndex - 1].accuracy : 0;
-        const nextAccuracy = insertIndex < accuracyPoints.length ? 
-          accuracyPoints[insertIndex].accuracy : 100;
-          
-        const correctedAccuracy = Math.max(
-          prevAccuracy,
-          Math.min(nextAccuracy, accuracy.accuracyPercent)
-        );
-        
-        // Insert at the right position
-        accuracyPoints.splice(insertIndex, 0, {
-          harmonics: numHarmonics,
-          accuracy: correctedAccuracy
-        });
-      }
-      
-      // Ensure monotonic increase
-      for (let i = 1; i < accuracyPoints.length; i++) {
-        if (accuracyPoints[i].accuracy < accuracyPoints[i-1].accuracy) {
-          accuracyPoints[i].accuracy = accuracyPoints[i-1].accuracy;
-        }
-      }
-      
-      // Scale if maximum accuracy is too low
-      const maxAccuracy = accuracyPoints[accuracyPoints.length - 1].accuracy;
-      if (maxAccuracy < 95 && maxAccuracy > 0) {
-        const scaleFactor = 100 / maxAccuracy;
-        for (let i = 0; i < accuracyPoints.length; i++) {
-          const newAccuracy = accuracyPoints[i].accuracy * scaleFactor;
-          accuracyPoints[i].accuracy = Math.min(100, newAccuracy);
-        }
-      }
-      
-      setAccuracyData(accuracyPoints);
-    };
-  }, [numHarmonics]);
-  
   // Handle harmonic slider change
   const handleHarmonicsChange = useCallback((newValue: number) => {
     setNumHarmonics(newValue);
@@ -353,7 +252,6 @@ const WaveAnalyzer: React.FC = () => {
           console.error('Error closing AudioContext:', err);
         });
       }
-      clearWaveCache();
       reconstructionCache.clear();
     };
   }, []);
@@ -476,15 +374,10 @@ const WaveAnalyzer: React.FC = () => {
   
   // Get current accuracy percentage
   const accuracyPercentage = useMemo(() => {
-    const currentPoint = accuracyData.find(p => p.harmonics === numHarmonics);
-    if (currentPoint) {
-      return currentPoint.accuracy.toFixed(2);
-    }
-    
-    // Calculate if not available in trend data
+    // Calculate accuracy if not available in trend data
     const accuracy = calculateReconstructionAccuracy(waveData, reconstructedWave);
     return accuracy.accuracyPercent.toFixed(2);
-  }, [accuracyData, numHarmonics, waveData, reconstructedWave]);
+  }, [waveData, reconstructedWave]);
   
   return (
     <div className="p-4 bg-[var(--background)] min-h-screen">
@@ -508,9 +401,10 @@ const WaveAnalyzer: React.FC = () => {
               value={waveType}
               onChange={(e) => setWaveType(e.target.value)}
             >
-              {Object.entries(WAVE_TYPES).map(([key, value]) => (
-                <option key={key} value={value}>{value}</option>
-              ))}
+              <option value={WAVE_TYPES.SINE}>{WAVE_TYPES.SINE}</option>
+              <option value={WAVE_TYPES.SQUARE}>{WAVE_TYPES.SQUARE}</option>
+              <option value={WAVE_TYPES.SAWTOOTH}>{WAVE_TYPES.SAWTOOTH}</option>
+              <option value={WAVE_TYPES.TRIANGLE}>{WAVE_TYPES.TRIANGLE}</option>
             </select>
             <p className="mt-1 text-sm text-gray-600">{waveExplanation}</p>
           </div>
@@ -591,19 +485,99 @@ const WaveAnalyzer: React.FC = () => {
           </div>
         </div>
         
-        {/* Spectral Analysis */}
+        {/* Spectral Analysis - Optimized */}
         <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
-          <SpectrumChart 
-            data={spectralData} 
-            useLogScale={useLogScale}
-            highlightedHarmonics={getHighlightedHarmonics()}
-            maxDisplayPoints={50}
-          />
+          <h2 className="text-xl font-semibold mb-4">Спектральный анализ</h2>
           
-          <div className="mt-4 text-sm">
-            <p><strong>Постоянная составляющая (DC):</strong> {fourierCoefficients.a0.toFixed(2)}</p>
-            <p><strong>Основная гармоника:</strong> {spectralData[1]?.amplitude.toFixed(2) || 0}</p>
-            <p><strong>Точность реконструкции:</strong> {accuracyPercentage}%</p>
+          <div className="h-72"> {/* Increased height for better visualization */}
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart 
+                data={spectralData.filter(d => d.harmonic <= 50)} 
+                margin={{ top: 15, right: 30, left: 70, bottom: 60 }} /* Adjusted margins for label positioning */
+                barGap={1}
+                barCategoryGap={1}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.7} />
+                <XAxis 
+                  dataKey="harmonic" 
+                  label={{ 
+                    value: 'Номер гармоники', 
+                    position: 'insideBottom', 
+                    offset: -10,
+                    dy: 35 /* Move label down */
+                  }}
+                  tick={{ dy: 5 }} /* Move tick values down */
+                  tickLine={{ stroke: '#666', strokeWidth: 1 }}
+                  axisLine={{ stroke: '#666', strokeWidth: 1 }}
+                />
+                <YAxis 
+                  label={{ 
+                    value: 'Амплитуда', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    dx: -50, /* Move label left */
+                    style: { textAnchor: 'middle' }
+                  }}
+                  scale={useLogScale ? 'log' : 'linear'}
+                  domain={useLogScale ? ['auto', 'auto'] : [0, 'auto']}
+                  tickFormatter={value => 
+                    value >= 1000 ? `${(value / 1000).toFixed(0)}K` : value
+                  }
+                  tick={{ dx: -5 }} /* Move tick values left */
+                  tickLine={{ stroke: '#666', strokeWidth: 1 }}
+                  axisLine={{ stroke: '#666', strokeWidth: 1 }}
+                  width={60} /* Ensure enough width for labels */
+                />
+                <Tooltip 
+                  formatter={(value: number) => [value.toFixed(2), 'Амплитуда']}
+                  labelFormatter={(label: number) => `Гармоника: ${label}`}
+                  contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '4px', padding: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}
+                />
+                <Legend 
+                  verticalAlign="top"
+                  align="right"
+                  wrapperStyle={{ paddingBottom: '10px', right: '30px' }}
+                  iconSize={10}
+                />
+                <Bar 
+                  dataKey="amplitude" 
+                  name="Амплитуда"
+                  fill="#3563E9"
+                  radius={[1, 1, 0, 0]} /* Slightly rounded top corners */
+                  maxBarSize={25}
+                >
+                  {/* Highlight important harmonics */}
+                  {spectralData.map((entry, index) => {
+                    const isHighlighted = getHighlightedHarmonics().includes(entry.harmonic);
+                    return (
+                      <Cell 
+                        key={`cell-${index}`}
+                        fill={isHighlighted ? '#FF7300' : '#3563E9'} 
+                        stroke={isHighlighted ? '#FF4500' : '#3563E9'}
+                        strokeWidth={isHighlighted ? 2 : 1}
+                      />
+                    );
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          
+          <div className="mt-4 text-sm bg-gray-50 p-3 rounded-md border border-gray-200">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="font-medium">Постоянная составляющая (DC):</p>
+                <p className="text-lg font-semibold">{fourierCoefficients.a0.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Основная гармоника:</p>
+                <p className="text-lg font-semibold">{spectralData[1]?.amplitude.toFixed(2) || 0}</p>
+              </div>
+              <div>
+                <p className="font-medium">Точность реконструкции:</p>
+                <p className="text-lg font-semibold">{accuracyPercentage}%</p>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -615,19 +589,33 @@ const WaveAnalyzer: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={combinedWaveData}
-                margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                margin={{ top: 20, right: 30, left: 40, bottom: 40 }}
+                syncId="waveforms"
               >
                 <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
                 <XAxis 
                   dataKey="t" 
-                  label={{ value: 'Время (с)', position: 'insideBottomRight', offset: -5 }} 
+                  label={{ 
+                    value: 'Время (с)', 
+                    position: 'insideBottom', 
+                    offset: -10,
+                    style: { textAnchor: 'middle' }
+                  }} 
                   tickFormatter={(value) => value.toFixed(3)}
                   domain={[0, 'dataMax']}
+                  padding={{ left: 5, right: 5 }}
                 />
                 <YAxis 
-                  domain={[-amplitude * 1, amplitude * 1]}
+                  domain={[-amplitude * 1.1, amplitude * 1.1]}
                   tickFormatter={(value) => `${Math.abs(value) >= 1000 ? (value/1000).toFixed(0) + 'K' : value}`}
-                  ticks={[-10000, -5000, 0, 5000, 10000]}
+                  ticks={[-amplitude, -amplitude/2, 0, amplitude/2, amplitude]}
+                  label={{
+                    value: 'Амплитуда', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    offset: -25,
+                    style: { textAnchor: 'middle' }
+                  }}
                 />
                 <Tooltip 
                   formatter={(value: any) => [value?.toFixed(0), '']}
@@ -638,45 +626,34 @@ const WaveAnalyzer: React.FC = () => {
                   verticalAlign="bottom"
                   iconType="line"
                   wrapperStyle={{ paddingTop: '10px' }}
+                  align="center"
                 />
                 
                 {/* Zero reference line */}
                 <ReferenceLine y={0} stroke="#666" strokeWidth={0.5} />
                 
-                {/* Ideal wave */}
-                {idealWaveData.length > 0 && (
-                  <Line 
-                    type="linear"
-                    dataKey="ideal"
-                    stroke="#000000"
-                    strokeDasharray="5 5"
-                    strokeWidth={1.5}
-                    dot={false}
-                    name="Идеальная форма волны"
-                    isAnimationActive={false}
-                  />
-                )}
+                {/* Original wave first for proper layering */}
+                <Line 
+                  type="linear"
+                  dataKey="original"
+                  stroke="#4169E1" // Royal blue
+                  strokeWidth={2}
+                  dot={false}
+                  name="Исходный сигнал"
+                  isAnimationActive={false}
+                  connectNulls={true}
+                />
                 
                 {/* Reconstructed wave */}
                 <Line 
                   type="linear"
                   dataKey="reconstructed"
-                  stroke="#4CAF50"
+                  stroke="#2E8B57" // Sea green
                   strokeWidth={2}
                   dot={false}
                   name={`Реконструкция (${numHarmonics} гармоник)`}
                   isAnimationActive={false}
-                />
-                
-                {/* Original wave */}
-                <Line 
-                  type="linear"
-                  dataKey="original"
-                  stroke="#3F51B5"
-                  strokeWidth={1.5}
-                  dot={false}
-                  name="Исходный сигнал"
-                  isAnimationActive={false}
+                  connectNulls={true}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -684,61 +661,7 @@ const WaveAnalyzer: React.FC = () => {
           
           <div className="mt-4 text-sm text-gray-600">
             <p>Наблюдайте, как при изменении числа гармоник в блоке параметров сигнала меняется форма реконструированной волны.</p>
-            <p>Чем больше гармоник, тем точнее аппроксимация приближается к идеальной форме волны.</p>
-          </div>
-        </div>
-        
-        {/* Accuracy Trend Chart */}
-        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-4">Зависимость точности реконструкции от числа гармоник</h2>
-          
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={accuracyData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="harmonics" 
-                  label={{ value: 'Количество гармоник', position: 'insideBottomRight', offset: -10 }} 
-                />
-                <YAxis 
-                  label={{ value: 'Точность (%)', angle: -90, position: 'insideLeft' }}
-                  domain={[0, 100]}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [`${value.toFixed(2)}%`, 'Точность']}
-                  labelFormatter={(label: number) => `Гармоник: ${label}`}
-                />
-                <Legend />
-                
-                {/* Mark current harmonic count */}
-                <Line 
-                  type="monotone" 
-                  dataKey="accuracy" 
-                  stroke="#8884d8" 
-                  activeDot={{ r: 8, fill: "#ff7300" }}
-                  name="Точность реконструкции"
-                />
-                <ReferenceLine 
-                  x={numHarmonics} 
-                  stroke="red" 
-                  strokeDasharray="3 3"
-                  label={{ value: 'Текущее', position: 'top', fill: 'red' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="mt-2 text-sm text-gray-600">
-            <p>График показывает, как изменяется точность реконструкции сигнала при увеличении числа используемых гармоник.</p>
-            <p>Для разных типов волн характерна разная скорость сходимости ряда Фурье:</p>
-            <ul className="list-disc pl-5 mt-1">
-              <li>Синусоида идеально воспроизводится одной гармоникой</li>
-              <li>Прямоугольная волна требует большого количества нечетных гармоник</li>
-              <li>Пилообразная волна сходится медленнее всего и требует как четных, так и нечетных гармоник</li>
-            </ul>
+            <p>Чем больше гармоник, тем точнее аппроксимация приближается к оригинальному сигналу.</p>
           </div>
         </div>
         
@@ -748,6 +671,9 @@ const WaveAnalyzer: React.FC = () => {
           <p className="mb-2">
             Данный интерактивный комплекс демонстрирует принципы разложения периодических звуковых волн в ряд Фурье и обратного синтеза сигнала.
           </p>
+          <p className="mb-4">
+            <strong>Важное замечание о разнице звучания:</strong> Различие между оригинальным и реконструированным звуком — ожидаемое поведение. Реконструкция использует лишь ограниченное число гармоник, тогда как идеальные формы волн (особенно прямоугольная и пилообразная) теоретически требуют бесконечного числа гармоник для точного воспроизведения резких переходов. При увеличении числа гармоник звучание реконструкции приближается к оригиналу.
+          </p>
           <p className="mb-2">
             <strong>Как использовать:</strong>
           </p>
@@ -755,8 +681,7 @@ const WaveAnalyzer: React.FC = () => {
             <li>Выберите тип волны (синусоида, прямоугольная, пилообразная или треугольная)</li>
             <li>Настройте частоту и амплитуду сигнала</li>
             <li>Изменяйте число гармоник с помощью ползунка и наблюдайте, как меняется форма восстановленного сигнала</li>
-            <li>Обратите внимание, как при увеличении числа гармоник аппроксимация приближается к идеальной форме волны</li>
-            <li>Изучите спектральный состав сигнала на диаграмме</li>
+            <li>Обратите внимание на спектральный состав сигнала на диаграмме</li>
             <li>Прослушайте как оригинальный, так и восстановленный сигналы</li>
           </ol>
           <p className="mb-2">

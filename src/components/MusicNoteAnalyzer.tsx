@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
+import EnhancedSpectralAnalyzer from '@/components/EnhancedSpectralAnalyzer';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
-} from 'recharts';
-import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
-import { createAudioBufferFromWave, identifyNote, playAudioBuffer } from '@/utils/audioUtils';
+  createAudioBufferFromWave, 
+  identifyNote, 
+  playAudioBuffer 
+} from '@/utils/audioUtils';
 import { SpectralPoint } from '@/utils/fourierTransform';
+import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
 
 /**
  * MusicNoteAnalyzer component - An interactive tool for analyzing musical notes and their spectral composition
@@ -31,7 +33,6 @@ const MusicNoteAnalyzer: React.FC = () => {
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const analyzerNodeRef = useRef<AnalyserNode | null>(null);
   
   /**
    * Initialize the audio context if needed
@@ -396,16 +397,6 @@ const MusicNoteAnalyzer: React.FC = () => {
   };
   
   /**
-   * Prepare data for spectrum visualization
-   */
-  const prepareSpectrumData = (): SpectralPoint[] => {
-    // Reduce the number of points for better performance
-    return spectrum
-      .filter((_, index) => index % 5 === 0) // Take every 5th point
-      .filter(item => item.frequency < 2000); // Limit to 2000 Hz for better visualization
-  };
-  
-  /**
    * Clean up audio resources when component unmounts
    */
   useEffect(() => {
@@ -498,7 +489,7 @@ const MusicNoteAnalyzer: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Нота</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Частота (Гц)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отклонение (центы)</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отклонение</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Амплитуда</th>
                   </tr>
                 </thead>
@@ -522,49 +513,146 @@ const MusicNoteAnalyzer: React.FC = () => {
           )}
         </div>
         
-        {/* Spectrum Graph */}
+        {/* Enhanced Spectrum Graph */}
         <div className="bg-white p-4 rounded-lg shadow lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-4">Спектральный анализ</h2>
+          <EnhancedSpectralAnalyzer 
+            data={spectrum} 
+            selectedNotes={activeNotes}
+            height={320}
+          />
           
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart 
-                data={prepareSpectrumData()} 
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="frequency" 
-                  label={{ value: 'Частота (Гц)', position: 'insideBottomRight', offset: -10 }} 
-                />
-                <YAxis 
-                  label={{ value: 'Амплитуда', angle: -90, position: 'insideLeft' }} 
-                />
-                <Tooltip 
-                  formatter={(value: number) => [value.toFixed(5), 'Амплитуда']}
-                  labelFormatter={(label: number) => `Частота: ${label.toFixed(2)} Гц`}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="amplitude" 
-                  stroke="#8884d8" 
-                  dot={false} 
-                  name="Спектральная составляющая"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="mt-4">
-            <h3 className="font-semibold mb-2">Выбранные ноты:</h3>
-            <div className="flex flex-wrap gap-2">
-              {activeNotes.map(note => (
-                <span key={note} className="px-2 py-1 bg-blue-100 rounded">
-                  {note} ({NOTE_NAMES_RU[note.replace(/\d/g, '')]}) - {NOTE_FREQUENCIES[note].toFixed(2)} Гц
-                </span>
-              ))}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Peak Information Panel */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-semibold mb-3 text-gray-800">Основные пики</h3>
+              {detectedNotes.length > 0 ? (
+                <div className="space-y-3">
+                  {detectedNotes.slice(0, 3).map((note, index) => (
+                    <div 
+                      key={index} 
+                      className={`flex justify-between items-center p-3 rounded-md ${
+                        index === 0 ? 'bg-blue-50 border border-blue-200' : 'bg-white border border-gray-100'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center">
+                          <span className={`font-bold text-lg ${
+                            index === 0 ? 'text-blue-700' : 'text-gray-700'
+                          }`}>{note.note}</span>
+                          <span className="ml-2 text-sm text-gray-500">({note.nameRu})</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Отклонение: <span className={note.cents.startsWith("+ ") ? "text-orange-600" : "text-green-600"}>
+                            {note.cents}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-gray-900 font-medium">{note.frequency.toFixed(2)} Гц</div>
+                        <div className="text-sm text-gray-500">
+                          {index === 0 ? 'Доминирующая частота' : `${Math.round(note.amplitude / detectedNotes[0].amplitude * 100)}% от основной`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 italic">Нет данных для анализа. Выберите ноты и нажмите "Проиграть аккорд".</p>
+              )}
             </div>
+            
+            {/* Harmonic Structure Panel */}
+            {/* <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-semibold mb-3 text-gray-800">Структура гармоник</h3>
+              {waveformType !== 'sine' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-gray-700">Тип волны:</span>
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-md font-medium">{waveformType}</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {waveformType === 'square' && (
+                      <>
+                        <p className="text-sm text-gray-600">Содержит только нечётные гармоники (1, 3, 5, ...)</p>
+                        <div className="flex gap-2 mt-2">
+                          {[1, 3, 5, 7, 9].map(n => (
+                            <span key={n} className="px-2 py-1 bg-gray-200 text-gray-800 rounded text-sm font-medium">
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    
+                    {waveformType === 'sawtooth' && (
+                      <>
+                        <p className="text-sm text-gray-600">Содержит все гармоники с амплитудой 1/n</p>
+                        <div className="flex gap-2 mt-2">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <span key={n} className="px-2 py-1 bg-gray-200 text-gray-800 rounded text-sm font-medium">
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    
+                    {waveformType === 'triangle' && (
+                      <>
+                        <p className="text-sm text-gray-600">Содержит только нечётные гармоники с быстрым затуханием (1/n²)</p>
+                        <div className="flex gap-2 mt-2">
+                          {[1, 3, 5, 7].map(n => (
+                            <span key={n} className="px-2 py-1 bg-gray-200 text-gray-800 rounded text-sm font-medium">
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t border-gray-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Чистота тона:</span>
+                      <div className="flex items-center">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <svg 
+                            key={i} 
+                            className={`w-4 h-4 ${i < (waveformType === 'sine' ? 5 : waveformType === 'triangle' ? 3 : 1) ? 'text-yellow-500' : 'text-gray-300'}`} 
+                            fill="currentColor" 
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Богатство тембра:</span>
+                      <div className="flex items-center">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <svg 
+                            key={i} 
+                            className={`w-4 h-4 ${i < (waveformType === 'sine' ? 1 : waveformType === 'triangle' ? 3 : 5) ? 'text-blue-500' : 'text-gray-300'}`} 
+                            fill="currentColor" 
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
+                  <p className="text-gray-700">Синусоида является чистым тоном и содержит только одну частоту без дополнительных гармоник.</p>
+                  <p className="mt-2 text-sm text-gray-600">Это базовый строительный блок для всех звуков, обладающий максимальной чистотой, но минимальной тембральной окраской.</p>
+                </div>
+              )}
+            </div> */}
           </div>
         </div>
         
@@ -604,7 +692,7 @@ const MusicNoteAnalyzer: React.FC = () => {
             <li>Прямоугольная волна богата нечетными гармониками</li>
             <li>Пилообразная содержит и четные, и нечетные гармоники</li>
             <li>Музыкальные интервалы определяются отношением частот (например, октава - это отношение 2:1)</li>
-            <li>Отклонение в центах показывает, насколько частота отличается от идеальной частоты ноты (1 полутон = 100 центов)</li>
+            <li>Отклонение показывает, насколько частота отличается от идеальной частоты ноты (1 полутон = 100 значений)</li>
           </ul>
         </div>
       </div>
