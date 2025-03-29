@@ -56,6 +56,7 @@ const WaveAnalyzer: React.FC = () => {
   const [amplitude, setAmplitude] = useState<number>(10000);
   const [duration, setDuration] = useState<number>(DEFAULT_DURATION);
   const [numHarmonics, setNumHarmonics] = useState<number>(10);
+  const [volume, setVolume] = useState<number>(0.5);
   
   // State for analysis data
   const [waveData, setWaveData] = useState<WavePoint[]>([]);
@@ -350,7 +351,7 @@ const WaveAnalyzer: React.FC = () => {
       sourceNodeRef.current = playAudioBuffer(audioContext, buffer, () => {
         setIsPlaying(false);
         sourceNodeRef.current = null;
-      });
+      }, volume); // Pass the volume parameter here
       
       setIsPlaying(true);
       
@@ -368,7 +369,7 @@ const WaveAnalyzer: React.FC = () => {
       setError(`Ошибка воспроизведения: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
       setIsPlaying(false);
     }
-  }, [waveType, frequency, amplitude, fourierCoefficients, numHarmonics]);
+  }, [waveType, frequency, amplitude, fourierCoefficients, numHarmonics, volume]);
   
   // Stop playback
   const stopSound = useCallback((): void => {
@@ -668,6 +669,23 @@ const WaveAnalyzer: React.FC = () => {
                 className="w-full"
               />
               <span className="ml-2 text-sm w-12">30000</span>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block mb-2">Громкость: {Math.round(volume * 100)}%</label>
+            <div className="flex items-center">
+              <span className="mr-2 text-sm w-10">0%</span>
+              <input 
+                type="range" 
+                min="0" 
+                max="1" 
+                step="0.01"
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm w-12">100%</span>
             </div>
           </div>
           

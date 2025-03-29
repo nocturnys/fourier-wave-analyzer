@@ -19,6 +19,7 @@ const MusicNoteAnalyzer: React.FC = () => {
   const [waveformType, setWaveformType] = useState<string>('sine');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [volume, setVolume] = useState<number>(0.5);
   
   // State for analysis results
   const [spectrum, setSpectrum] = useState<SpectralPoint[]>([]);
@@ -356,7 +357,7 @@ const MusicNoteAnalyzer: React.FC = () => {
       sourceNodeRef.current = playAudioBuffer(audioContext, buffer, () => {
         setIsPlaying(false);
         sourceNodeRef.current = null;
-      });
+      }, volume); // Pass the volume parameter here
       
       setIsPlaying(true);
       
@@ -437,6 +438,23 @@ const MusicNoteAnalyzer: React.FC = () => {
               <option value="sawtooth">Пилообразная</option>
               <option value="triangle">Треугольная</option>
             </select>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block mb-2">Громкость:</label>
+            <div className="flex items-center">
+              <span className="mr-2 text-sm">0%</span>
+              <input 
+                type="range" 
+                min="0" 
+                max="1" 
+                step="0.01"
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm">{Math.round(volume * 100)}%</span>
+            </div>
           </div>
           
           <div className="mb-4">
