@@ -8,9 +8,9 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Link 
           href="/analyzers/wave" 
-          className="p-6 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          className="p-6 bg-white border rounded-lg shadow-md hover:shadow-lg transition-shadow"
         >
-          <h3 className="text-xl font-semibold mb-2">Анализатор звуковых волн</h3>
+          <h3 className="text-xl font-semibold mb-2 ">Анализатор звуковых волн</h3>
           <p className="text-gray-600">
             Исследуйте различные типы звуковых волн, их спектральный состав и 
             разложение в ряд Фурье. Визуализируйте процесс реконструкции сигнала
@@ -20,7 +20,7 @@ export default function Home() {
         
         <Link 
           href="/analyzers/music" 
-          className="p-6 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          className="p-6 bg-white border rounded-lg shadow-md hover:shadow-lg transition-shadow"
         >
           <h3 className="text-xl font-semibold mb-2">Анализатор музыкальных нот</h3>
           <p className="text-gray-600">

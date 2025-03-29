@@ -566,7 +566,7 @@ const WaveAnalyzer: React.FC = () => {
         zerolinewidth: 1,
         type: useLogScale ? 'log' : 'linear'
       },
-      height: 450,
+      height: 500,
       autosize: true,
       margin: { l: 70, r: 70, t: 60, b: 70 },
       paper_bgcolor: 'rgba(255,255,255,0.95)',
@@ -614,7 +614,7 @@ const WaveAnalyzer: React.FC = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Control Panel */}
-        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border ]"> {/* border-[var(--card-border)*/}
           <h2 className="text-xl font-semibold mb-4">Параметры сигнала</h2>
           
           {error && (
@@ -763,7 +763,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Spectral Analysis - Scientific Enhanced Version */}
-        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border">
           {spectralData.length > 0 ? (
             <Plot
               data={spectralVisualizationData}
@@ -806,7 +806,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Combined Wave Visualization - Scientific Enhanced Version */}
-        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border lg:col-span-2">
           {combinedWaveData.length > 0 ? (
             <Plot
               data={waveVisualizationData}
@@ -821,7 +821,7 @@ const WaveAnalyzer: React.FC = () => {
             </div>
           )}
           
-          <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-300">
             <h3 className="font-medium text-gray-800 mb-2">Интерпретация гармонического анализа:</h3>
             <p className="mb-2">
               График демонстрирует процесс аппроксимации исходного сигнала (синяя линия) 
@@ -842,7 +842,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Technical Information Panel */}
-        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border lg:col-span-2">
           <h2 className="text-xl font-semibold mb-4">Техническая информация</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -314,7 +314,7 @@ const MusicNoteAnalyzer: React.FC = () => {
     let audioContext = audioContextRef.current;
     if (!audioContext) {
       try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        const AudioContextClass = window.AudioContext || window.AudioContext;
         audioContext = new AudioContextClass();
         audioContextRef.current = audioContext;
       } catch (err) {
@@ -417,7 +417,7 @@ const MusicNoteAnalyzer: React.FC = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Note Selection Panel */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white p-4 border rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Выбор нот</h2>
           
           {error && (
@@ -496,7 +496,7 @@ const MusicNoteAnalyzer: React.FC = () => {
         </div>
         
         {/* Detected Notes */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white p-4 border rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Определенные ноты</h2>
           
           {detectedNotes.length > 0 ? (
@@ -532,11 +532,11 @@ const MusicNoteAnalyzer: React.FC = () => {
         </div>
         
         {/* Enhanced Spectrum Graph */}
-        <div className="bg-white p-4 rounded-lg shadow lg:col-span-2">
+        <div className="bg-white p-4 border rounded-lg shadow lg:col-span-2">
           <MusicSpectralChart 
             data={spectrum} 
             selectedNotes={activeNotes}
-            height={320}
+            height={520}
           />
           
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -675,7 +675,7 @@ const MusicNoteAnalyzer: React.FC = () => {
         </div>
         
         {/* Explanation Section */}
-        <div className="bg-white p-4 rounded-lg shadow lg:col-span-2">
+        <div className="bg-white p-4 rounded-lg border shadow lg:col-span-2">
           <h2 className="text-xl font-semibold mb-4">О музыкальных нотах и спектре</h2>
           
           <p className="mb-2">
