@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, ReferenceLine
+  ResponsiveContainer, ReferenceLine, Legend
 } from 'recharts';
 import { SpectralPoint } from '@/utils/fourierTransform';
 import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
+import Plot from 'react-plotly.js';
 
 interface MusicSpectralChartProps {
   data: SpectralPoint[];
@@ -14,18 +15,19 @@ interface MusicSpectralChartProps {
 
 /**
  * Enhanced spectral analysis visualization optimized for complex chords with multiple notes
+ * Uses Plotly.js for scientific-quality visualization
  */
 const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
   data,
   selectedNotes,
-  height = 340
+  height = 500 // Increased height for better visualization
 }) => {
   // Process spectral data with optimized peak detection
-  const { chartData, peaks, maxFrequency } = useMemo(() => {
+  const { processedData, peaks, frequencyRange } = useMemo(() => {
     if (!data || data.length === 0) return { 
-      chartData: [], 
+      processedData: [], 
       peaks: [],
-      maxFrequency: 1000
+      frequencyRange: [0, 1000]
     };
     
     // Process data points
@@ -90,7 +92,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
             note: closestNote.note,
             nameRu: `${nameRu}${octave}`,
             cents: centsValue,
-            deviation: centsText ? `(${centsText} значений)` : '',
+            deviation: centsText ? `(${centsText} центов)` : '',
             displayName: `${closestNote.note} (${nameRu}${octave})`,
             frequencyText: `${freq.toFixed(1)}Гц`
           });
@@ -105,395 +107,474 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
       .sort((a, b) => a.frequency - b.frequency)
       .slice(0, 12); // Handle up to 12 peaks, which should be enough for complex chords
     
-    // Calculate an appropriate frequency range
-    const highestPeakFreq = Math.max(...sortedPeaks.map(p => p.frequency), 500);
-    const lowestPeakFreq = Math.min(...sortedPeaks.map(p => p.frequency), 0);
-    const range = highestPeakFreq - lowestPeakFreq;
+    // Calculate appropriate frequency range
+    const significantPeaks = sortedPeaks.filter(p => p.amplitude > threshold * 5);
+    let highestFreq = Math.max(
+      ...significantPeaks.map(p => p.frequency),
+      ...selectedNotes.map(note => NOTE_FREQUENCIES[note]),
+      600 // Minimum default
+    );
     
-    // Calculate buffer based on range (wider range = more buffer)
-    const bufferPercentage = Math.min(0.3, Math.max(0.15, 50 / range));
-    const buffer = range * bufferPercentage;
+    let lowestFreq = Math.min(
+      ...significantPeaks.map(p => p.frequency),
+      ...selectedNotes.map(note => NOTE_FREQUENCIES[note]),
+      100 // Default start frequency
+    );
     
-    // Calculate nice round values for min/max frequency
-    const minFreq = Math.max(0, Math.floor((lowestPeakFreq - buffer) / 100) * 100);
-    const maxFreq = Math.min(2000, Math.ceil((highestPeakFreq + buffer) / 100) * 100);
+    // Add buffer to range
+    const buffer = (highestFreq - lowestFreq) * 0.15;
+    const minFreq = Math.max(20, Math.floor((lowestFreq - buffer) / 10) * 10);
+    const maxFreq = Math.min(2000, Math.ceil((highestFreq + buffer) / 100) * 100);
     
-    return { 
-      chartData: processedData,
+    return {
+      processedData,
       peaks: sortedPeaks,
-      maxFrequency: maxFreq,
-      minFrequency: minFreq
+      frequencyRange: [minFreq, maxFreq]
     };
-  }, [data]);
+  }, [data, selectedNotes]);
 
-  // Formatter for frequency axis
-  const formatFrequency = (value: number) => {
-    if (value >= 1000) {
-      return `${(value / 1000).toFixed(1)}kHz`;
-    }
-    return `${Math.round(value)}Hz`;
+  // Scientific color palette that works well for spectral visualization
+  const SCIENTIFIC_COLORS = {
+    primary: 'rgb(65, 105, 225)',       // Royal Blue
+    primaryLight: 'rgba(65, 105, 225, 0.2)',
+    secondary: 'rgb(46, 139, 87)',      // Sea Green
+    highlight: 'rgb(255, 127, 0)',      // Orange
+    peaks: [
+      'rgb(228, 26, 28)',    // Red
+      'rgb(55, 126, 184)',   // Blue
+      'rgb(77, 175, 74)',    // Green
+      'rgb(152, 78, 163)',   // Purple
+      'rgb(255, 127, 0)'     // Orange
+    ]
   };
-  
-  // Smart color assignment - maintain hue distinctiveness even with many notes
-  const getPeakColors = useMemo(() => {
-    // Base colors for up to 5 peaks
-    const baseColors = [
-      { bg: '#FF453A', lighter: '#FFE5E5', text: '#9A0000' },  // Red
-      { bg: '#FF9F0A', lighter: '#FFF4E5', text: '#954F00' },  // Orange
-      { bg: '#30D158', lighter: '#E3FBE9', text: '#0A541F' },  // Green
-      { bg: '#64D2FF', lighter: '#E5F6FF', text: '#004A77' },  // Blue
-      { bg: '#BF5AF2', lighter: '#F5E9FF', text: '#5B1E77' }   // Purple
-    ];
-    
-    // For many peaks, create a more varied color palette
-    if (peaks.length > 5) {
-      // Generate extended colors by interpolating
-      return peaks.map((_, index) => {
-        const hue = (index * (360 / peaks.length)) % 360;
-        // Create different saturation levels for alternating notes
-        const saturation = index % 2 === 0 ? '90%' : '75%';
-        const lightness = index % 2 === 0 ? '50%' : '45%';
-        const lighterLightness = '95%';
-        
-        return {
-          bg: `hsl(${hue}, ${saturation}, ${lightness})`,
-          lighter: `hsl(${hue}, 30%, ${lighterLightness})`,
-          text: `hsl(${hue}, ${saturation}, 25%)`
-        };
-      });
-    }
-    
-    return baseColors;
-  }, [peaks.length]);
 
-  // Custom tooltip component
-  const renderTooltip = ({ active, payload }: any) => {
-    if (!active || !payload || !payload.length) return null;
-    
-    const data = payload[0].payload;
-    const freq = data.frequency;
-    const amp = data.amplitude;
-    
-    // Find closest musical note
-    const closestNote = Object.entries(NOTE_FREQUENCIES).reduce(
-      (closest, [note, noteFreq]) => {
-        const diff = Math.abs(freq - noteFreq);
-        return diff < closest.diff ? { note, diff } : closest;
+  // Prepare data for Plotly visualization
+  const plotlyData = useMemo(() => {
+    // If no data, return empty array
+    if (processedData.length === 0) return [];
+
+    // Main spectral data trace
+    const mainTrace = {
+      x: processedData.map(d => d.frequency),
+      y: processedData.map(d => d.amplitude),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Спектр',
+      line: {
+        shape: 'spline',
+        color: SCIENTIFIC_COLORS.primary,
+        width: 2
       },
-      { note: '', diff: Infinity }
-    );
-    
-    // Calculate cents deviation
-    let centsInfo = '';
-    if (closestNote.diff < 15) {
-      const exactCents = 1200 * Math.log2(freq / NOTE_FREQUENCIES[closestNote.note]);
-      const cents = Math.round(exactCents);
-      centsInfo = cents === 0 ? '' : ` (${cents > 0 ? '+' : ''}${cents} центов)`;
-    }
-    
-    const noteName = closestNote.diff < 15 
-      ? `${closestNote.note} (${NOTE_NAMES_RU[closestNote.note.replace(/\d/g, '')]}${centsInfo})` 
-      : '';
+      fill: 'tozeroy',
+      fillcolor: SCIENTIFIC_COLORS.primaryLight,
+      hoverinfo: 'x+y',
+      hovertemplate: '<b>Частота</b>: %{x:.1f} Гц<br><b>Амплитуда</b>: %{y:.6f}<extra></extra>'
+    };
 
-    return (
-      <div style={{ 
-        background: 'rgba(255,255,255,0.95)', 
-        backdropFilter: 'blur(10px)',
-        boxShadow: '0 2px 14px rgba(0,0,0,0.12)',
-        border: 'none',
-        borderRadius: '10px',
-        padding: '12px 14px',
-        fontSize: '13px'
-      }}>
-        <p style={{ fontWeight: 600, marginBottom: '8px' }}>
-          Частота: {freq.toFixed(2)} Гц
-        </p>
-        <p style={{ color: '#666', marginBottom: '6px' }}>
-          Амплитуда: {amp.toFixed(6)}
-        </p>
-        {noteName && (
-          <p style={{ 
-            fontWeight: 500,
-            color: '#0066CC',
-            marginTop: '6px',
-            paddingTop: '6px',
-            borderTop: '1px solid rgba(0,0,0,0.1)'
-          }}>
-            {noteName}
-          </p>
-        )}
-      </div>
-    );
-  };
+    // Create traces for selected notes
+    const noteTraces = selectedNotes.map(note => {
+      const frequency = NOTE_FREQUENCIES[note];
+      const noteName = `${note} (${NOTE_NAMES_RU[note.replace(/\d/g, '')]})`;
+      
+      return {
+        x: [frequency, frequency],
+        y: [0, 0.0001], // Small vertical line
+        type: 'scatter',
+        mode: 'lines',
+        name: noteName,
+        line: {
+          color: 'rgba(65, 105, 225, 0.5)',
+          width: 1.5,
+          dash: 'dash'
+        },
+        hoverinfo: 'name+x',
+        hovertemplate: `<b>${noteName}</b>: %{x:.1f} Гц<extra></extra>`
+      };
+    });
 
-  // Calculate optimal tick intervals for frequency axis
-  const getFrequencyTicks = useMemo(() => {
-    const max = maxFrequency;
-    let step;
-    
-    if (max > 1500) step = 500;
-    else if (max > 1000) step = 250;
-    else if (max > 500) step = 100;
-    else if (max > 200) step = 50;
-    else step = 25;
-    
-    const ticks = [];
-    for (let i = 0; i <= max; i += step) {
-      ticks.push(i);
-    }
-    
-    return ticks;
-  }, [maxFrequency]);
+    // Create traces for detected peaks
+    const peakTraces = peaks.map((peak, index) => {
+      const color = SCIENTIFIC_COLORS.peaks[index % SCIENTIFIC_COLORS.peaks.length];
+      
+      return {
+        x: [peak.frequency, peak.frequency],
+        y: [0, peak.amplitude],
+        type: 'scatter',
+        mode: 'lines',
+        name: `${peak.note} (${peak.nameRu})`,
+        line: {
+          color: color,
+          width: 2
+        },
+        hoverinfo: 'name+x+y',
+        hovertemplate: `
+          <b>${peak.note} (${peak.nameRu})</b>${peak.cents !== 0 ? ' (' + (peak.cents > 0 ? '+' : '') + peak.cents + ' центов)' : ''}<br>
+          <b>Частота</b>: %{x:.1f} Гц<br>
+          <b>Амплитуда</b>: %{y:.6f}
+          <extra></extra>
+        `
+      };
+    });
 
-  // Layout optimization for many peaks
-  const renderPeakCards = () => {
-    // For many peaks, use a more compact grid layout
-    if (peaks.length > 5) {
-      return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
-          {peaks.map((peak, index) => {
-            const colorSet = getPeakColors[index % getPeakColors.length];
-            
-            return (
-              <div 
-                key={`peak-card-${index}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  backgroundColor: colorSet.lighter,
-                  color: colorSet.text,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  border: `1px solid ${colorSet.bg}30`,
-                }}
-              >
-                <div style={{ width: '100%' }}>
-                  <div style={{ 
-                    fontWeight: 600, 
-                    display: 'flex', 
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <span>{peak.note} ({peak.nameRu})</span>
-                    <span 
-                      style={{ 
-                        width: '8px', 
-                        height: '8px', 
-                        borderRadius: '50%', 
-                        backgroundColor: colorSet.bg,
-                        flexShrink: 0,
-                        marginLeft: '4px'
-                      }}
-                    />
-                  </div>
-                  <div style={{ 
-                    fontSize: '12px', 
-                    opacity: 0.9,
-                    display: 'flex',
-                    justifyContent: 'space-between'
-                  }}>
-                    <span>{peak.frequency.toFixed(1)}Гц</span>
-                    {peak.cents !== 0 && (
-                      <span style={{ marginLeft: '4px', color: peak.cents > 0 ? '#FF9F0A' : '#30D158' }}>
-                        {peak.cents > 0 ? '+' : ''}{peak.cents}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
+    return [mainTrace, ...noteTraces, ...peakTraces];
+  }, [processedData, selectedNotes, peaks, SCIENTIFIC_COLORS]);
+
+  // Layout configuration for Plotly
+  const plotlyLayout = useMemo(() => {
+    return {
+      title: {
+        text: 'Спектральный анализ музыкальных нот',
+        font: {
+          family: 'Arial, sans-serif',
+          size: 20,
+          color: '#333'
+        }
+      },
+      height: typeof height === 'number' ? height : 500,
+      autosize: true,
+      margin: { l: 70, r: 70, t: 50, b: 70 },
+      paper_bgcolor: 'rgba(255,255,255,0.95)',
+      plot_bgcolor: 'rgba(248,249,250,0.95)',
+      xaxis: {
+        title: {
+          text: 'Частота (Гц)',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        range: frequencyRange,
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        gridwidth: 1,
+        zeroline: false,
+        ticksuffix: ' Гц',
+        hoverformat: '.1f',
+        tickfont: {
+          family: 'Arial, sans-serif',
+          size: 12,
+          color: '#333'
+        },
+        // Add minor ticks for more precise reading
+        minor: {
+          showgrid: true,
+          gridcolor: 'rgba(200,200,200,0.2)',
+          gridwidth: 0.5,
+          nticks: 5
+        }
+      },
+      yaxis: {
+        title: {
+          text: 'Амплитуда',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        gridwidth: 1,
+        zeroline: true,
+        zerolinewidth: 1,
+        zerolinecolor: 'rgba(0,0,0,0.3)',
+        hoverformat: '.6f',
+        tickfont: {
+          family: 'Arial, sans-serif',
+          size: 12,
+          color: '#333'
+        }
+      },
+      showlegend: false,
+      hovermode: 'closest',
+      hoverlabel: {
+        bgcolor: 'rgba(255,255,255,0.95)',
+        font: {
+          family: 'Arial, sans-serif',
+          size: 12,
+          color: '#333'
+        },
+        bordercolor: 'rgba(0,0,0,0.1)'
+      },
+      // Add note reference lines at A4 = 440Hz and its octaves
+      shapes: [
+        {
+          type: 'line',
+          x0: 440,
+          x1: 440,
+          y0: 0,
+          y1: 1,
+          yref: 'paper',
+          line: {
+            color: 'rgba(200,0,0,0.3)',
+            width: 1,
+            dash: 'dash'
+          }
+        },
+        // Add octave lines if in range
+        frequencyRange[1] >= 880 ? {
+          type: 'line',
+          x0: 880,
+          x1: 880,
+          y0: 0,
+          y1: 1,
+          yref: 'paper',
+          line: {
+            color: 'rgba(200,0,0,0.2)',
+            width: 1,
+            dash: 'dash'
+          }
+        } : null,
+        frequencyRange[0] <= 220 ? {
+          type: 'line',
+          x0: 220,
+          x1: 220,
+          y0: 0,
+          y1: 1,
+          yref: 'paper',
+          line: {
+            color: 'rgba(200,0,0,0.2)',
+            width: 1,
+            dash: 'dash'
+          }
+        } : null
+      ].filter(Boolean),
+      annotations: [
+        // Reference note label for A4 = 440Hz
+        {
+          x: 440,
+          y: 1,
+          xref: 'x',
+          yref: 'paper',
+          text: 'A4 (Ля)',
+          showarrow: false,
+          font: {
+            family: 'Arial, sans-serif',
+            size: 10,
+            color: 'rgba(200,0,0,0.7)'
+          },
+          bgcolor: 'rgba(255,255,255,0.7)',
+          bordercolor: 'rgba(200,0,0,0.3)',
+          borderwidth: 1,
+          borderpad: is880InRange() ? 1 : 2,
+          y: is880InRange() ? 0.95 : 0.98
+        },
+        // Octave labels if in range
+        frequencyRange[1] >= 880 ? {
+          x: 880,
+          y: 0.95,
+          xref: 'x',
+          yref: 'paper',
+          text: 'A5 (Ля)',
+          showarrow: false,
+          font: {
+            family: 'Arial, sans-serif',
+            size: 10,
+            color: 'rgba(200,0,0,0.7)'
+          },
+          bgcolor: 'rgba(255,255,255,0.7)',
+          bordercolor: 'rgba(200,0,0,0.3)',
+          borderwidth: 1,
+          borderpad: 1
+        } : null,
+        frequencyRange[0] <= 220 ? {
+          x: 220,
+          y: 0.95,
+          xref: 'x',
+          yref: 'paper',
+          text: 'A3 (Ля)',
+          showarrow: false,
+          font: {
+            family: 'Arial, sans-serif',
+            size: 10,
+            color: 'rgba(200,0,0,0.7)'
+          },
+          bgcolor: 'rgba(255,255,255,0.7)',
+          bordercolor: 'rgba(200,0,0,0.3)',
+          borderwidth: 1,
+          borderpad: 1
+        } : null,
+        // Add peak annotations
+        ...peaks.map((peak, index) => ({
+          x: peak.frequency,
+          y: peak.amplitude,
+          text: `${peak.note}`,
+          showarrow: true,
+          arrowhead: 2,
+          arrowsize: 1,
+          arrowwidth: 1.5,
+          arrowcolor: '#333',
+          ax: (index % 2 === 0 ? 20 : -20),
+          ay: (index % 2 === 0 ? -20 : -30),
+          font: {
+            family: 'Arial, sans-serif',
+            size: 10,
+            color: SCIENTIFIC_COLORS.peaks[index % SCIENTIFIC_COLORS.peaks.length]
+          },
+          bgcolor: 'rgba(255,255,255,0.8)',
+          bordercolor: 'rgba(0,0,0,0.1)',
+          borderwidth: 1,
+          borderpad: 2
+        }))
+      ].filter(Boolean)
+    };
+  }, [height, frequencyRange, peaks, SCIENTIFIC_COLORS]);
+
+  // Helper function to check if 880Hz is in range for annotation positioning
+  function is880InRange() {
+    return frequencyRange[1] >= 880;
+  }
+
+  // Config options for Plotly
+  const plotlyConfig = {
+    responsive: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: [
+      'sendDataToCloud', 'toggleSpikelines', 'hoverCompareCartesian',
+      'drawline', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape'
+    ],
+    displaylogo: false,
+    toImageButtonOptions: {
+      format: 'svg', // Better for scientific publications
+      filename: 'spectral_analysis',
+      scale: 2
     }
-    
-    // For fewer peaks, use the original horizontal layout
-    return (
-      <div className="flex flex-wrap gap-2 mb-4">
-        {peaks.map((peak, index) => {
-          const colorSet = getPeakColors[index % getPeakColors.length];
-          
-          return (
-            <div 
-              key={`peak-card-${index}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                backgroundColor: colorSet.bg,
-                color: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{peak.note} ({peak.nameRu})</div>
-                <div style={{ fontSize: '12px', opacity: 0.9 }}>
-                  {peak.frequency.toFixed(1)}Гц
-                  {peak.cents !== 0 && (
-                    <span style={{ marginLeft: '4px' }}>
-                      ({peak.cents > 0 ? '+' : ''}{peak.cents} значений)
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
   };
 
   return (
     <div className="w-full font-sans">
       <h2 className="text-xl font-semibold mb-4">Спектральный анализ</h2>
       
-      {/* Adaptive Peak Cards Layout */}
-      {peaks.length > 0 && renderPeakCards()}
+      {/* Peaks display with scientific styling */}
+      {peaks.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mb-6">
+          {peaks.map((peak, index) => {
+            const colorIndex = index % SCIENTIFIC_COLORS.peaks.length;
+            const color = SCIENTIFIC_COLORS.peaks[colorIndex];
+            
+            return (
+              <div 
+                key={`peak-card-${index}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  border: `2px solid ${color}`,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                <div style={{ 
+                  fontWeight: 600, 
+                  fontSize: '14px',
+                  color: color,
+                  marginBottom: '4px'
+                }}>
+                  {peak.note} ({peak.nameRu})
+                </div>
+                <div style={{ 
+                  fontWeight: 500,
+                  fontSize: '13px', 
+                  color: '#333',
+                  marginBottom: '2px'
+                }}>
+                  {peak.frequency.toFixed(1)} Гц
+                </div>
+                {peak.cents !== 0 && (
+                  <div style={{ 
+                    fontSize: '12px',
+                    color: peak.cents > 0 ? '#d97706' : '#059669',
+                    fontStyle: 'italic'
+                  }}>
+                    {peak.cents > 0 ? '+' : ''}{peak.cents} центов
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       
+      {/* Plotly chart with enhanced scientific styling */}
       <div style={{ 
-        width: '100%', 
-        height, 
-        position: 'relative',
-        borderRadius: '10px',
+        borderRadius: '8px',
         overflow: 'hidden',
         backgroundColor: '#f8f9fa',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       }}>
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.07)" />
-              
-              {/* X-axis (Frequency) with optimized range */}
-              <XAxis 
-                dataKey="frequency" 
-                type="number"
-                domain={[0, maxFrequency]}
-                ticks={getFrequencyTicks}
-                tickFormatter={formatFrequency}
-                tickMargin={8}
-                tick={{ fontSize: 11, fill: '#666' }}
-                padding={{ left: 10, right: 10 }}
-                stroke="#ccc"
-                label={{ 
-                  value: 'Частота', 
-                  position: 'insideBottom',
-                  offset: -15,
-                  style: { 
-                    textAnchor: 'middle', 
-                    fontSize: 12, 
-                    fill: '#666' 
-                  }
-                }}
-              />
-              
-              {/* Y-axis (Amplitude) */}
-              <YAxis 
-                type="number"
-                domain={[0, 'auto']}
-                tickFormatter={(value) => value.toFixed(4)}
-                tick={{ fontSize: 11, fill: '#666' }}
-                width={60}
-                orientation="left"
-                stroke="#ccc"
-                label={{ 
-                  value: 'Амплитуда', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  offset: -10,
-                  style: { 
-                    textAnchor: 'middle', 
-                    fontSize: 12, 
-                    fill: '#666' 
-                  }
-                }}
-              />
-
-              <Tooltip content={renderTooltip} />
-              
-              {/* Premium gradient */}
-              <defs>
-                <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="rgba(10,132,255,0.7)"/>
-                  <stop offset="95%" stopColor="rgba(10,132,255,0.05)"/>
-                </linearGradient>
-              </defs>
-              
-              {/* Area visualization */}
-              <Area
-                type="monotone"
-                dataKey="amplitude"
-                stroke="#0A84FF"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#blueGradient)"
-                dot={false}
-                activeDot={{ 
-                  r: 5, 
-                  stroke: 'white', 
-                  strokeWidth: 2, 
-                  fill: '#0A84FF' 
-                }}
-                isAnimationActive={false}
-              />
-              
-              {/* Vertical lines for peaks */}
-              {peaks.map((peak, index) => {
-                const colorSet = getPeakColors[index % getPeakColors.length];
-                
-                return (
-                  <ReferenceLine
-                    key={`peak-line-${index}`}
-                    x={peak.frequency}
-                    stroke={colorSet.bg}
-                    strokeWidth={1.5}
-                    strokeDasharray="3 3"
-                    ifOverflow="extendDomain"
-                  />
-                );
-              })}
-              
-              {/* Selected notes reference lines */}
-              {selectedNotes.map((note) => (
-                <ReferenceLine 
-                  key={`selected-note-${note}`}
-                  x={NOTE_FREQUENCIES[note]} 
-                  stroke="rgba(10,132,255,0.3)" 
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  ifOverflow="extendDomain"
-                />
-              ))}
-            </AreaChart>
-          </ResponsiveContainer>
+        {processedData.length > 0 ? (
+          <Plot
+            data={plotlyData}
+            layout={plotlyLayout}
+            config={plotlyConfig}
+            style={{ width: '100%', height: '100%' }}
+            useResizeHandler={true}
+          />
         ) : (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
             <div className="text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
               </svg>
-              <p className="mt-2 text-sm text-gray-500">Нет данных для анализа</p>
-              <p className="mt-1 text-xs text-gray-400">Выберите ноты и нажмите "Проиграть аккорд"</p>
+              <p className="mt-3 text-base text-gray-500">Нет данных для анализа</p>
+              <p className="mt-1 text-sm text-gray-400">Выберите ноты и нажмите "Проиграть аккорд"</p>
             </div>
           </div>
         )}
       </div>
       
-      {/* Selected Notes */}
+      {/* Selected notes with enhanced scientific styling */}
       {selectedNotes.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Выбранные ноты:</h3>
+        <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 className="text-base font-medium text-gray-700 mb-3">Выбранные ноты:</h3>
           <div className="flex flex-wrap gap-2">
             {selectedNotes.map(note => (
-              <span key={note} className="px-4 py-1.5 bg-blue-100 text-blue-800 rounded-md text-sm font-medium">
-                {note} ({NOTE_NAMES_RU[note.replace(/\d/g, '')]}) {NOTE_FREQUENCIES[note].toFixed(1)} Гц
+              <span 
+                key={note} 
+                className="px-4 py-2 rounded-md text-sm font-medium flex items-center"
+                style={{ 
+                  backgroundColor: 'rgba(65, 105, 225, 0.1)', 
+                  color: SCIENTIFIC_COLORS.primary,
+                  border: '1px solid rgba(65, 105, 225, 0.3)'
+                }}
+              >
+                <span className="mr-2 font-bold">{note}</span>
+                <span className="mr-2">({NOTE_NAMES_RU[note.replace(/\d/g, '')]})</span>
+                <span className="text-gray-600">{NOTE_FREQUENCIES[note].toFixed(1)} Гц</span>
               </span>
             ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Scientific information panel about harmonics */}
+      {peaks.length > 0 && (
+        <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 className="text-base font-medium text-gray-700 mb-2">Научная справка:</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Спектральный анализ показывает частотный состав сигнала. Каждый пик соответствует 
+            отдельной частоте (ноте) в звуке. Высота пика отражает относительную громкость этой ноты.
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="bg-white p-3 rounded border border-gray-200">
+              <p className="font-medium text-gray-800">Интервал анализа</p>
+              <p className="text-gray-600">{frequencyRange[0]}-{frequencyRange[1]} Гц</p>
+            </div>
+            <div className="bg-white p-3 rounded border border-gray-200">
+              <p className="font-medium text-gray-800">Основная нота</p>
+              <p className="text-gray-600">{peaks.length > 0 ? peaks[0].note : 'Не определена'}</p>
+            </div>
+            <div className="bg-white p-3 rounded border border-gray-200">
+              <p className="font-medium text-gray-800">Октавное отношение</p>
+              <p className="text-gray-600">1:2 (880/440 Гц)</p>
+            </div>
+            <div className="bg-white p-3 rounded border border-gray-200">
+              <p className="font-medium text-gray-800">Квинтовое отношение</p>
+              <p className="text-gray-600">2:3 (440/660 Гц)</p>
+            </div>
           </div>
         </div>
       )}

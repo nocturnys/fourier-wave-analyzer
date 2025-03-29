@@ -22,7 +22,8 @@ export default function RootLayout({
         <div className="bg-[var(--primary)] text-white py-4">
           <div className="container mx-auto px-4" key="header">
             <h1 className="text-3xl font-bold">Анализатор звуковых волн</h1>
-            <p className="mt-2">Интерактивный программный комплекс для изучения гармонического состава звуков</p>
+            <p className="mt-2">Интерактивный программный комплекс для изучения гармонического состава звуков. </p>
+            <p className="mt-2 underline decoration-solid">Подготовил студент 421 группы Космынин Константин</p>
           </div>
         </div>
         {children}

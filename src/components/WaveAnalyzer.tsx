@@ -22,6 +22,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell 
 } from 'recharts';
+import Plot from 'react-plotly.js';
 
 // Cache for reconstructions
 const reconstructionCache = new Map<string, WavePoint[]>();
@@ -76,6 +77,16 @@ const WaveAnalyzer: React.FC = () => {
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Scientific color scheme for harmonics
+  const SCIENTIFIC_COLORS = {
+    primary: '#4169E1',      // Royal Blue
+    secondary: '#228B22',    // Forest Green
+    highlight: '#FF7F00',    // Orange
+    accent: '#9932CC',       // Dark Orchid
+    contrast: '#CD5C5C',     // Indian Red
+    neutral: '#555555',      // Dark Gray
+  };
   
   // Combined data for dynamic visualization with precise time alignment
   const combinedWaveData = useMemo(() => {
@@ -378,6 +389,223 @@ const WaveAnalyzer: React.FC = () => {
     const accuracy = calculateReconstructionAccuracy(waveData, reconstructedWave);
     return accuracy.accuracyPercent.toFixed(2);
   }, [waveData, reconstructedWave]);
+
+  // Prepare wave visualization data for Plotly
+  const waveVisualizationData = useMemo(() => {
+    return [
+      {
+        x: combinedWaveData.map(point => point.t * 1000), // Convert to ms for better visualization
+        y: combinedWaveData.map(point => point.original),
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Исходный сигнал',
+        line: {
+          color: SCIENTIFIC_COLORS.primary,
+          width: 2
+        }
+      },
+      {
+        x: combinedWaveData.map(point => point.t * 1000), // Convert to ms for better visualization
+        y: combinedWaveData.map(point => point.reconstructed),
+        type: 'scatter',
+        mode: 'lines',
+        name: `Реконструкция (${numHarmonics} гармоник)`,
+        line: {
+          color: SCIENTIFIC_COLORS.secondary,
+          width: 2,
+          dash: 'solid'
+        }
+      }
+    ];
+  }, [combinedWaveData, numHarmonics, SCIENTIFIC_COLORS]);
+
+  // Wave visualization layout for Plotly
+  const waveLayout = useMemo(() => {
+    return {
+      title: {
+        text: 'Аппроксимация сигнала с помощью рядов Фурье',
+        font: {
+          family: 'Arial, sans-serif',
+          size: 22,
+          color: '#333'
+        }
+      },
+      xaxis: {
+        title: {
+          text: 'Время (мс)',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        domain: [0, duration * 1000], // ms
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        zeroline: true,
+        zerolinecolor: 'rgba(0,0,0,0.3)',
+        zerolinewidth: 1
+      },
+      yaxis: {
+        title: {
+          text: 'Амплитуда',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        zeroline: true,
+        zerolinecolor: 'rgba(0,0,0,0.3)',
+        zerolinewidth: 1,
+        range: [-amplitude * 1.1, amplitude * 1.1]
+      },
+      height: 500,
+      autosize: true,
+      margin: { l: 70, r: 70, t: 60, b: 70 },
+      paper_bgcolor: 'rgba(255,255,255,0.95)',
+      plot_bgcolor: 'rgba(240,240,240,0.95)',
+      legend: {
+        x: 0.01,
+        y: 0.99,
+        bgcolor: 'rgba(255,255,255,0.7)',
+        bordercolor: 'rgba(0,0,0,0.1)',
+        borderwidth: 1
+      },
+      shapes: [
+        // Zero line
+        {
+          type: 'line',
+          x0: 0,
+          x1: duration * 1000,
+          y0: 0,
+          y1: 0,
+          line: {
+            color: 'rgba(0,0,0,0.5)',
+            width: 1,
+            dash: 'dot'
+          }
+        }
+      ]
+    };
+  }, [duration, amplitude, numHarmonics]);
+
+  // Spectral visualization data for Plotly
+  const spectralVisualizationData = useMemo(() => {
+    // Highlight important harmonics
+    const highlightedHarmonics = getHighlightedHarmonics();
+    
+    return [
+      {
+        x: spectralData.filter(d => d.harmonic <= 50).map(d => d.harmonic),
+        y: spectralData.filter(d => d.harmonic <= 50).map(d => d.amplitude),
+        type: 'bar',
+        name: 'Амплитуда',
+        marker: {
+          color: spectralData.filter(d => d.harmonic <= 50).map(d => 
+            highlightedHarmonics.includes(d.harmonic) ? 
+              SCIENTIFIC_COLORS.highlight : 
+              SCIENTIFIC_COLORS.primary
+          ),
+          line: {
+            color: spectralData.filter(d => d.harmonic <= 50).map(d => 
+              highlightedHarmonics.includes(d.harmonic) ? 
+                '#FF4500' : 
+                SCIENTIFIC_COLORS.primary
+            ),
+            width: 1
+          }
+        }
+      }
+    ];
+  }, [spectralData, getHighlightedHarmonics, SCIENTIFIC_COLORS]);
+
+  // Spectral visualization layout for Plotly
+  const spectralLayout = useMemo(() => {
+    return {
+      title: {
+        text: 'Спектральный анализ',
+        font: {
+          family: 'Arial, sans-serif',
+          size: 22,
+          color: '#333'
+        }
+      },
+      xaxis: {
+        title: {
+          text: 'Номер гармоники',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        zeroline: true,
+        zerolinecolor: 'rgba(0,0,0,0.3)',
+        zerolinewidth: 1,
+        dtick: 1
+      },
+      yaxis: {
+        title: {
+          text: 'Амплитуда',
+          font: {
+            family: 'Arial, sans-serif',
+            size: 16,
+            color: '#333'
+          }
+        },
+        showgrid: true,
+        gridcolor: 'rgba(200,200,200,0.4)',
+        zeroline: true,
+        zerolinecolor: 'rgba(0,0,0,0.3)',
+        zerolinewidth: 1,
+        type: useLogScale ? 'log' : 'linear'
+      },
+      height: 450,
+      autosize: true,
+      margin: { l: 70, r: 70, t: 60, b: 70 },
+      paper_bgcolor: 'rgba(255,255,255,0.95)',
+      plot_bgcolor: 'rgba(240,240,240,0.95)',
+      bargap: 0.15,
+      annotations: getHighlightedHarmonics().map(harmonic => {
+        const dataPoint = spectralData.find(d => d.harmonic === harmonic);
+        if (!dataPoint) return null;
+        
+        return {
+          x: harmonic,
+          y: dataPoint.amplitude,
+          text: dataPoint.amplitude.toFixed(2),
+          showarrow: false,
+          yshift: 10,
+          font: {
+            family: 'Arial, sans-serif',
+            size: 10,
+            color: '#333'
+          }
+        };
+      }).filter(Boolean)
+    };
+  }, [useLogScale, getHighlightedHarmonics, spectralData]);
+
+  // Enhanced config for Plotly
+  const plotlyConfig = {
+    responsive: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: [
+      'sendDataToCloud', 'toggleSpikelines', 'hoverCompareCartesian',
+      'drawline', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape'
+    ],
+    displaylogo: false,
+    toImageButtonOptions: {
+      format: 'svg', // Better for scientific publications
+      filename: 'wave_analysis',
+      scale: 2
+    }
+  };
   
   return (
     <div className="p-4 bg-[var(--background)] min-h-screen">
@@ -411,41 +639,57 @@ const WaveAnalyzer: React.FC = () => {
           
           <div className="mb-4">
             <label className="block mb-2">Частота (Гц): {frequency} Гц</label>
-            <input 
-              type="range" 
-              min="20" 
-              max="2000" 
-              step="1"
-              value={frequency}
-              onChange={(e) => setFrequency(Number(e.target.value))}
-              className="w-full"
-            />
+            <div className="flex items-center">
+              <span className="mr-2 text-sm w-10">20</span>
+              <input 
+                type="range" 
+                min="20" 
+                max="2000" 
+                step="1"
+                value={frequency}
+                onChange={(e) => setFrequency(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm w-12">2000</span>
+            </div>
           </div>
           
           <div className="mb-4">
             <label className="block mb-2">Амплитуда: {amplitude}</label>
-            <input 
-              type="range" 
-              min="1000" 
-              max="30000" 
-              step="1000"
-              value={amplitude}
-              onChange={(e) => setAmplitude(Number(e.target.value))}
-              className="w-full"
-            />
+            <div className="flex items-center">
+              <span className="mr-2 text-sm w-10">1000</span>
+              <input 
+                type="range" 
+                min="1000" 
+                max="30000" 
+                step="1000"
+                value={amplitude}
+                onChange={(e) => setAmplitude(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm w-12">30000</span>
+            </div>
           </div>
           
           <div className="mb-4">
             <label className="block mb-2">Число гармоник: {numHarmonics}</label>
-            <input 
-              type="range" 
-              min="1" 
-              max="50" 
-              step="1"
-              value={numHarmonics}
-              onChange={(e) => handleHarmonicsChange(Number(e.target.value))}
-              className="w-full"
-            />
+            <div className="flex items-center">
+              <span className="mr-2 text-sm w-6">1</span>
+              <input 
+                type="range" 
+                min="1" 
+                max="50" 
+                step="1"
+                value={numHarmonics}
+                onChange={(e) => handleHarmonicsChange(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm w-6">50</span>
+            </div>
+            <div className="mt-1 text-xs text-gray-600 flex justify-between">
+              <span>Меньше гармоник (чище звук)</span>
+              <span>Больше гармоник (точнее форма)</span>
+            </div>
           </div>
           
           <div className="mb-4">
@@ -458,6 +702,21 @@ const WaveAnalyzer: React.FC = () => {
               />
               <span>Логарифмическая шкала для спектра</span>
             </label>
+            <p className="mt-1 text-xs text-gray-500">Позволяет лучше видеть гармоники с малой амплитудой</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="bg-blue-50 p-3 rounded border border-blue-200">
+              <h3 className="text-sm font-semibold text-blue-800 mb-1">Точность реконструкции</h3>
+              <div className="text-2xl font-bold text-blue-600">{accuracyPercentage}%</div>
+              <p className="text-xs text-blue-500 mt-1">С текущим числом гармоник</p>
+            </div>
+            
+            <div className="bg-gray-50 p-3 rounded border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-800 mb-1">Частотное разрешение</h3>
+              <div className="text-2xl font-bold text-gray-600">{(frequency / 10).toFixed(2)} Гц</div>
+              <p className="text-xs text-gray-500 mt-1">При {duration.toFixed(3)} с анализа</p>
+            </div>
           </div>
           
           <div className="flex space-x-2 mt-6">
@@ -485,214 +744,193 @@ const WaveAnalyzer: React.FC = () => {
           </div>
         </div>
         
-        {/* Spectral Analysis - Optimized */}
+        {/* Spectral Analysis - Scientific Enhanced Version */}
         <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
-          <h2 className="text-xl font-semibold mb-4">Спектральный анализ</h2>
+          {spectralData.length > 0 ? (
+            <Plot
+              data={spectralVisualizationData}
+              layout={spectralLayout}
+              config={plotlyConfig}
+              style={{ width: '100%', height: '450px' }}
+              useResizeHandler={true}
+            />
+          ) : (
+            <div className="h-96 flex items-center justify-center">
+              <p className="text-gray-500">Генерируем данные...</p>
+            </div>
+          )}
           
-          <div className="h-72"> {/* Increased height for better visualization */}
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={spectralData.filter(d => d.harmonic <= 50)} 
-                margin={{ top: 15, right: 30, left: 70, bottom: 60 }} /* Adjusted margins for label positioning */
-                barGap={1}
-                barCategoryGap={1}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.7} />
-                <XAxis 
-                  dataKey="harmonic" 
-                  label={{ 
-                    value: 'Номер гармоники', 
-                    position: 'insideBottom', 
-                    offset: -10,
-                    dy: 35 /* Move label down */
-                  }}
-                  tick={{ dy: 5 }} /* Move tick values down */
-                  tickLine={{ stroke: '#666', strokeWidth: 1 }}
-                  axisLine={{ stroke: '#666', strokeWidth: 1 }}
-                />
-                <YAxis 
-                  label={{ 
-                    value: 'Амплитуда', 
-                    angle: -90, 
-                    position: 'insideLeft',
-                    dx: -50, /* Move label left */
-                    style: { textAnchor: 'middle' }
-                  }}
-                  scale={useLogScale ? 'log' : 'linear'}
-                  domain={useLogScale ? ['auto', 'auto'] : [0, 'auto']}
-                  tickFormatter={value => 
-                    value >= 1000 ? `${(value / 1000).toFixed(0)}K` : value
-                  }
-                  tick={{ dx: -5 }} /* Move tick values left */
-                  tickLine={{ stroke: '#666', strokeWidth: 1 }}
-                  axisLine={{ stroke: '#666', strokeWidth: 1 }}
-                  width={60} /* Ensure enough width for labels */
-                />
-                <Tooltip 
-                  formatter={(value: number) => [value.toFixed(2), 'Амплитуда']}
-                  labelFormatter={(label: number) => `Гармоника: ${label}`}
-                  contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '4px', padding: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}
-                />
-                <Legend 
-                  verticalAlign="top"
-                  align="right"
-                  wrapperStyle={{ paddingBottom: '10px', right: '30px' }}
-                  iconSize={10}
-                />
-                <Bar 
-                  dataKey="amplitude" 
-                  name="Амплитуда"
-                  fill="#3563E9"
-                  radius={[1, 1, 0, 0]} /* Slightly rounded top corners */
-                  maxBarSize={25}
-                >
-                  {/* Highlight important harmonics */}
-                  {spectralData.map((entry, index) => {
-                    const isHighlighted = getHighlightedHarmonics().includes(entry.harmonic);
-                    return (
-                      <Cell 
-                        key={`cell-${index}`}
-                        fill={isHighlighted ? '#FF7300' : '#3563E9'} 
-                        stroke={isHighlighted ? '#FF4500' : '#3563E9'}
-                        strokeWidth={isHighlighted ? 2 : 1}
-                      />
-                    );
-                  })}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="mt-4 text-sm bg-gray-50 p-3 rounded-md border border-gray-200">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="font-medium">Постоянная составляющая (DC):</p>
-                <p className="text-lg font-semibold">{fourierCoefficients.a0.toFixed(2)}</p>
+          <div className="mt-4 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md border border-gray-200">
+            <div>
+              <p className="font-medium text-gray-700">Постоянная составляющая (DC):</p>
+              <p className="text-lg font-semibold text-[var(--primary)]">{fourierCoefficients.a0.toFixed(2)}</p>
+              <p className="text-xs text-gray-500">Среднее значение сигнала</p>
+            </div>
+            <div>
+              <p className="font-medium text-gray-700">Доминирующие гармоники:</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {getHighlightedHarmonics().map(harmonic => (
+                  <span 
+                    key={harmonic}
+                    className="inline-block px-2 py-1 text-xs font-medium rounded" 
+                    style={{
+                      backgroundColor: SCIENTIFIC_COLORS.highlight,
+                      color: 'white'
+                    }}
+                  >
+                    {harmonic}
+                  </span>
+                ))}
               </div>
-              <div>
-                <p className="font-medium">Основная гармоника:</p>
-                <p className="text-lg font-semibold">{spectralData[1]?.amplitude.toFixed(2) || 0}</p>
-              </div>
-              <div>
-                <p className="font-medium">Точность реконструкции:</p>
-                <p className="text-lg font-semibold">{accuracyPercentage}%</p>
-              </div>
+              <p className="text-xs text-gray-500 mt-1">Характерны для выбранного типа волны</p>
             </div>
           </div>
         </div>
         
-        {/* Combined Wave Visualization - Updated design */}
+        {/* Combined Wave Visualization - Scientific Enhanced Version */}
         <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-4">Аппроксимация сигнала с помощью рядов Фурье</h2>
+          {combinedWaveData.length > 0 ? (
+            <Plot
+              data={waveVisualizationData}
+              layout={waveLayout}
+              config={plotlyConfig}
+              style={{ width: '100%', height: '500px' }}
+              useResizeHandler={true}
+            />
+          ) : (
+            <div className="h-96 flex items-center justify-center">
+              <p className="text-gray-500">Генерируем данные...</p>
+            </div>
+          )}
           
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={combinedWaveData}
-                margin={{ top: 20, right: 30, left: 40, bottom: 40 }}
-                syncId="waveforms"
-              >
-                <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
-                <XAxis 
-                  dataKey="t" 
-                  label={{ 
-                    value: 'Время (с)', 
-                    position: 'insideBottom', 
-                    offset: -10,
-                    style: { textAnchor: 'middle' }
-                  }} 
-                  tickFormatter={(value) => value.toFixed(3)}
-                  domain={[0, 'dataMax']}
-                  padding={{ left: 5, right: 5 }}
-                />
-                <YAxis 
-                  domain={[-amplitude * 1.1, amplitude * 1.1]}
-                  tickFormatter={(value) => `${Math.abs(value) >= 1000 ? (value/1000).toFixed(0) + 'K' : value}`}
-                  ticks={[-amplitude, -amplitude/2, 0, amplitude/2, amplitude]}
-                  label={{
-                    value: 'Амплитуда', 
-                    angle: -90, 
-                    position: 'insideLeft',
-                    offset: -25,
-                    style: { textAnchor: 'middle' }
-                  }}
-                />
-                <Tooltip 
-                  formatter={(value: any) => [value?.toFixed(0), '']}
-                  labelFormatter={(label: any) => `Время: ${Number(label).toFixed(4)} с`}
-                  contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', border: '1px solid #ddd' }}
-                />
-                <Legend 
-                  verticalAlign="bottom"
-                  iconType="line"
-                  wrapperStyle={{ paddingTop: '10px' }}
-                  align="center"
-                />
-                
-                {/* Zero reference line */}
-                <ReferenceLine y={0} stroke="#666" strokeWidth={0.5} />
-                
-                {/* Original wave first for proper layering */}
-                <Line 
-                  type="linear"
-                  dataKey="original"
-                  stroke="#4169E1" // Royal blue
-                  strokeWidth={2}
-                  dot={false}
-                  name="Исходный сигнал"
-                  isAnimationActive={false}
-                  connectNulls={true}
-                />
-                
-                {/* Reconstructed wave */}
-                <Line 
-                  type="linear"
-                  dataKey="reconstructed"
-                  stroke="#2E8B57" // Sea green
-                  strokeWidth={2}
-                  dot={false}
-                  name={`Реконструкция (${numHarmonics} гармоник)`}
-                  isAnimationActive={false}
-                  connectNulls={true}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="mt-4 text-sm text-gray-600">
-            <p>Наблюдайте, как при изменении числа гармоник в блоке параметров сигнала меняется форма реконструированной волны.</p>
-            <p>Чем больше гармоник, тем точнее аппроксимация приближается к оригинальному сигналу.</p>
+          <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 className="font-medium text-gray-800 mb-2">Интерпретация гармонического анализа:</h3>
+            <p className="mb-2">
+              График демонстрирует процесс аппроксимации исходного сигнала (синяя линия) 
+              с помощью ряда Фурье, состоящего из {numHarmonics} гармоник (зеленая линия).
+            </p>
+            <p>
+              {waveType === WAVE_TYPES.SINE ? (
+                <>Синусоидальная волна идеально представляется одной гармоникой, поэтому аппроксимация практически совпадает с оригиналом.</>
+              ) : waveType === WAVE_TYPES.SQUARE ? (
+                <>Прямоугольная волна требует бесконечного ряда нечетных гармоник для идеального воспроизведения. Вы можете заметить эффект Гиббса — колебания около точек разрыва.</>
+              ) : waveType === WAVE_TYPES.SAWTOOTH ? (
+                <>Пилообразная волна содержит все гармоники, убывающие как 1/n. При малом числе гармоник заметны плавные переходы вместо резких скачков.</>
+              ) : (
+                <>Треугольная волна содержит только нечетные гармоники, убывающие как 1/n². Благодаря быстрому убыванию амплитуд, аппроксимация сходится быстрее, чем для других типов волн.</>
+              )}
+            </p>
           </div>
         </div>
         
-        {/* Explanation Section */}
+        {/* Technical Information Panel */}
         <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-4">О проекте</h2>
-          <p className="mb-2">
-            Данный интерактивный комплекс демонстрирует принципы разложения периодических звуковых волн в ряд Фурье и обратного синтеза сигнала.
-          </p>
-          <p className="mb-4">
-            <strong>Важное замечание о разнице звучания:</strong> Различие между оригинальным и реконструированным звуком — ожидаемое поведение. Реконструкция использует лишь ограниченное число гармоник, тогда как идеальные формы волн (особенно прямоугольная и пилообразная) теоретически требуют бесконечного числа гармоник для точного воспроизведения резких переходов. При увеличении числа гармоник звучание реконструкции приближается к оригиналу.
-          </p>
-          <p className="mb-2">
-            <strong>Как использовать:</strong>
-          </p>
-          <ol className="list-decimal pl-5 mb-4">
-            <li>Выберите тип волны (синусоида, прямоугольная, пилообразная или треугольная)</li>
-            <li>Настройте частоту и амплитуду сигнала</li>
-            <li>Изменяйте число гармоник с помощью ползунка и наблюдайте, как меняется форма восстановленного сигнала</li>
-            <li>Обратите внимание на спектральный состав сигнала на диаграмме</li>
-            <li>Прослушайте как оригинальный, так и восстановленный сигналы</li>
-          </ol>
-          <p className="mb-2">
-            <strong>Термины и метрики:</strong>
-          </p>
-          <ul className="list-disc pl-5 mb-4">
-            <li><strong>Гармоника</strong> - синусоидальная составляющая сигнала с частотой, кратной основной частоте</li>
-            <li><strong>Спектр</strong> - набор амплитуд всех гармонических составляющих сигнала</li>
-            <li><strong>Ряд Фурье</strong> - представление периодической функции в виде суммы синусов и косинусов разных частот</li>
-            <li><strong>Точность реконструкции</strong> - мера соответствия восстановленного сигнала оригинальному</li>
-          </ul>
+          <h2 className="text-xl font-semibold mb-4">Техническая информация</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="text-base font-medium text-gray-800 mb-2">Параметры анализа</h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr>
+                    <td className="py-1 text-gray-600">Частота дискретизации:</td>
+                    <td className="py-1 text-right font-medium">{SAMPLE_RATE} Гц</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Длительность анализа:</td>
+                    <td className="py-1 text-right font-medium">{duration.toFixed(3)} с</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Количество отсчетов:</td>
+                    <td className="py-1 text-right font-medium">{Math.floor(SAMPLE_RATE * duration)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Частотное разрешение:</td>
+                    <td className="py-1 text-right font-medium">{(1/duration).toFixed(2)} Гц</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="text-base font-medium text-gray-800 mb-2">Характеристики сигнала</h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr>
+                    <td className="py-1 text-gray-600">Основная частота:</td>
+                    <td className="py-1 text-right font-medium">{frequency} Гц</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Амплитуда:</td>
+                    <td className="py-1 text-right font-medium">{amplitude}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Период колебаний:</td>
+                    <td className="py-1 text-right font-medium">{(1/frequency * 1000).toFixed(2)} мс</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Полное количество периодов:</td>
+                    <td className="py-1 text-right font-medium">{(frequency * duration).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="text-base font-medium text-gray-800 mb-2">Свойства спектра</h3>
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr>
+                    <td className="py-1 text-gray-600">Количество гармоник:</td>
+                    <td className="py-1 text-right font-medium">{numHarmonics}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Высшая гармоника:</td>
+                    <td className="py-1 text-right font-medium">{frequency * numHarmonics} Гц</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Точность реконструкции:</td>
+                    <td className="py-1 text-right font-medium">{accuracyPercentage}%</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1 text-gray-600">Значимых гармоник:</td>
+                    <td className="py-1 text-right font-medium">{spectralData.filter(d => d.amplitude > 0.01 * Math.max(...spectralData.map(d => d.amplitude))).length}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h3 className="text-base font-medium text-blue-800 mb-2">Подробнее о гармоническом анализе</h3>
+            <p className="text-sm text-blue-700 mb-2">
+              Разложение сигнала в ряд Фурье представляет его как сумму синусоид разных частот и амплитуд.
+              Этот подход лежит в основе многих методов обработки сигналов и сжатия данных (MP3, JPEG).
+            </p>
+            <p className="text-sm text-blue-700">
+              Для периодического сигнала с частотой f, ряд Фурье содержит гармоники с частотами f, 2f, 3f...
+              Амплитуды этих гармоник определяют спектр сигнала и его тембровую окраску.
+            </p>
+            
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+              <div className="bg-white p-2 rounded border border-blue-100">
+                <p className="font-medium text-blue-800">Синусоида</p>
+                <p className="text-blue-600">Содержит только 1 гармонику</p>
+              </div>
+              <div className="bg-white p-2 rounded border border-blue-100">
+                <p className="font-medium text-blue-800">Прямоугольная</p>
+                <p className="text-blue-600">Только нечетные гармоники (1/n)</p>
+              </div>
+              <div className="bg-white p-2 rounded border border-blue-100">
+                <p className="font-medium text-blue-800">Пилообразная</p>
+                <p className="text-blue-600">Все гармоники (1/n)</p>
+              </div>
+              <div className="bg-white p-2 rounded border border-blue-100">
+                <p className="font-medium text-blue-800">Треугольная</p>
+                <p className="text-blue-600">Только нечетные гармоники (1/n²)</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

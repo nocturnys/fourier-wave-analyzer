@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import EnhancedSpectralAnalyzer from '@/components/EnhancedSpectralAnalyzer';
+import MusicSpectralChart from '@/components/MusicSpectralChart';
 import { 
   createAudioBufferFromWave, 
   identifyNote, 
@@ -515,7 +515,7 @@ const MusicNoteAnalyzer: React.FC = () => {
         
         {/* Enhanced Spectrum Graph */}
         <div className="bg-white p-4 rounded-lg shadow lg:col-span-2">
-          <EnhancedSpectralAnalyzer 
+          <MusicSpectralChart 
             data={spectrum} 
             selectedNotes={activeNotes}
             height={320}
