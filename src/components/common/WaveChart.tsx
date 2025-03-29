@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   ResponsiveContainer, ReferenceLine 
@@ -52,6 +52,9 @@ const WaveChart: React.FC<WaveChartProps> = ({
   xAxisLabel = "Время (с)",
   yAxisLabel = "Амплитуда",
 }) => {
+  // Состояние для отображения описания метрик
+  const [showMetricsHelp, setShowMetricsHelp] = useState<boolean>(false);
+  
   // Prepare data for visualization with optimized rendering
   const preparedData = useMemo(() => {
     if (!data || data.length === 0) {
@@ -173,12 +176,63 @@ const WaveChart: React.FC<WaveChartProps> = ({
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-xl font-semibold">{title}</h2>
         
-        {/* Optional metrics display */}
-        <div className="text-sm text-gray-600">
-          <span className="mr-3">RMS: {rmsValue.toFixed(2)}</span>
-          <span>Размах: {peakToPeak.toFixed(2)}</span>
+        {/* Metrics display with help icons */}
+        <div className="text-sm text-gray-600 flex items-center">
+          <div className="flex items-center mr-3 group relative">
+            <span>RMS: {rmsValue.toFixed(2)}</span>
+            <button
+              className="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none"
+              onClick={() => setShowMetricsHelp(!showMetricsHelp)}
+              aria-label="Информация о RMS"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 16v-4M12 8h.01"></path>
+              </svg>
+            </button>
+            <div className="group-hover:block hidden absolute right-0 top-6 bg-gray-800 text-white text-xs p-2 rounded shadow-lg w-48 z-10">
+              Среднеквадратичное значение, характеризует эффективную мощность сигнала
+            </div>
+          </div>
+          
+          <div className="flex items-center group relative">
+            <span>Размах: {peakToPeak.toFixed(2)}</span>
+            <button
+              className="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none"
+              onClick={() => setShowMetricsHelp(!showMetricsHelp)}
+              aria-label="Информация о размахе"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 16v-4M12 8h.01"></path>
+              </svg>
+            </button>
+            <div className="group-hover:block hidden absolute right-0 top-6 bg-gray-800 text-white text-xs p-2 rounded shadow-lg w-48 z-10">
+              Разница между максимальным и минимальным значениями сигнала
+            </div>
+          </div>
         </div>
       </div>
+      
+      {/* Всплывающая подсказка с пояснениями метрик */}
+      {showMetricsHelp && (
+        <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm text-gray-700 mb-3 relative">
+          <button 
+            className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+            onClick={() => setShowMetricsHelp(false)}
+            aria-label="Закрыть подсказку"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <p><strong>RMS (Root Mean Square)</strong> - среднеквадратичное значение сигнала, характеризует эффективную мощность. 
+          Чем выше RMS, тем громче воспринимается звук.</p>
+          <p className="mt-1"><strong>Размах (Peak-to-Peak)</strong> - разница между максимальным и минимальным значениями амплитуды. 
+          Показывает полный диапазон колебаний волны.</p>
+        </div>
+      )}
       
       <div style={{ width: '100%', height: height, position: 'relative' }}>
         {preparedData.length > 0 ? (
@@ -252,6 +306,7 @@ const WaveChart: React.FC<WaveChartProps> = ({
                 dot={showPoints}
                 name="Амплитуда"
                 isAnimationActive={false} // Disable animation for better performance
+                strokeWidth={2} // Увеличенная толщина линии для лучшей видимости
               />
               
               {/* Comparison waveform if provided */}
@@ -264,6 +319,7 @@ const WaveChart: React.FC<WaveChartProps> = ({
                   dot={showPoints}
                   name="Сравнение"
                   isAnimationActive={false}
+                  strokeWidth={2}
                 />
               )}
             </LineChart>

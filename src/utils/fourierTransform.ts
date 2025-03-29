@@ -268,7 +268,15 @@ export function prepareSpectralData(
 
 /**
  * Calculates accuracy of Fourier reconstruction compared to original waveform.
- * Uses Mean Squared Error (MSE) as the accuracy metric.
+ * Uses Mean Squared Error (MSE) and normalized accuracy metrics.
+ * 
+ * @param original Original waveform points
+ * @param reconstructed Reconstructed waveform points
+ * @returns Object containing MSE and normalized accuracy percentage
+ */
+/**
+ * Calculates accuracy of Fourier reconstruction compared to original waveform.
+ * Uses normalized Mean Squared Error (MSE) for more reliable accuracy metrics.
  * 
  * @param original Original waveform points
  * @param reconstructed Reconstructed waveform points
@@ -309,26 +317,91 @@ export function calculateReconstructionAccuracy(
   
   // Calculate mean squared error
   let sumSquaredDiff = 0;
+  let sumSquaredOriginal = 0;
+  
   for (let i = 0; i < originalSamples.length; i++) {
     const diff = originalSamples[i] - reconstructedSamples[i];
     sumSquaredDiff += diff * diff;
+    sumSquaredOriginal += originalSamples[i] * originalSamples[i];
   }
+  
+  // Calculate MSE
   const mse = sumSquaredDiff / originalSamples.length;
   
-  // Calculate maximum possible error (for normalization)
-  let maxPossibleError = 0;
-  for (const sample of originalSamples) {
-    maxPossibleError += sample * sample;
-  }
-  maxPossibleError /= originalSamples.length;
+  // Calculate normalized error as a percentage of original power
+  const originalPower = sumSquaredOriginal / originalSamples.length;
   
-  // Convert to accuracy percentage (100% - error%)
-  // Limit to range [0, 100]
-  const accuracyPercent = Math.max(0, Math.min(100, 100 * (1 - Math.sqrt(mse / maxPossibleError))));
+  // Calculate accuracy percentage using simple normalization
+  let accuracyPercent;
+  
+  if (originalPower > 0) {
+    // Calculate normalized error ratio (0 to 1, where 0 is perfect)
+    // Limit to 1.0 maximum error ratio
+    const errorRatio = Math.min(1, mse / originalPower);
+    
+    // Convert to accuracy percentage (100% means perfect reconstruction)
+    accuracyPercent = 100 * (1 - errorRatio);
+  } else {
+    // Edge case: if original signal is all zeros
+    accuracyPercent = mse === 0 ? 100 : 0;
+  }
+  
+  // Ensure the value is within bounds
+  accuracyPercent = Math.max(0, Math.min(100, accuracyPercent));
   
   return { mse, accuracyPercent };
 }
 
+/**
+ * Helper function to find the index of the point with the closest time value.
+ * 
+ * @param points Array of wave points
+ * @param time Target time value
+ * @returns Index of the closest point, or -1 if array is empty
+ */
+// function findClosestPointIndex(points: WavePoint[], time: number): number {
+//   if (points.length === 0) return -1;
+  
+//   // If time is outside the range of points, return the closest endpoint
+//   if (time <= points[0].t) return 0;
+//   if (time >= points[points.length - 1].t) return points.length - 1;
+  
+//   // Use linear search for small arrays, binary search for larger ones
+//   if (points.length < 100) {
+//     // Linear search for small arrays
+//     let closestIndex = 0;
+//     let minDistance = Math.abs(points[0].t - time);
+    
+//     for (let i = 1; i < points.length; i++) {
+//       const distance = Math.abs(points[i].t - time);
+//       if (distance < minDistance) {
+//         minDistance = distance;
+//         closestIndex = i;
+//       }
+//     }
+    
+//     return closestIndex;
+//   } else {
+//     // Binary search for larger arrays
+//     let left = 0;
+//     let right = points.length - 1;
+    
+//     while (right - left > 1) {
+//       const mid = Math.floor((left + right) / 2);
+//       if (points[mid].t < time) {
+//         left = mid;
+//       } else {
+//         right = mid;
+//       }
+//     }
+    
+//     // Determine which of the two closest points is actually closest
+//     const leftDiff = Math.abs(points[left].t - time);
+//     const rightDiff = Math.abs(points[right].t - time);
+    
+//     return leftDiff < rightDiff ? left : right;
+//   }
+// }
 /**
  * Helper function to find the index of the point with the closest time value.
  * 
