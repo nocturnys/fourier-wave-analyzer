@@ -309,8 +309,29 @@ const MusicNoteAnalyzer: React.FC = () => {
     }
     
     // Initialize audio context
-    const audioContext = initializeAudioContext();
-    if (!audioContext) return;
+    let audioContext = audioContextRef.current;
+    if (!audioContext) {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioContext = new AudioContextClass();
+        audioContextRef.current = audioContext;
+      } catch (err) {
+        console.error('Failed to create AudioContext:', err);
+        setError('Ошибка при инициализации аудио');
+        return;
+      }
+    }
+    
+    // Resume audio context if it's suspended (critical for Chrome)
+    if (audioContext.state === 'suspended') {
+      try {
+        await audioContext.resume();
+      } catch (err) {
+        console.error('Failed to resume AudioContext:', err);
+        setError('Ошибка при активации аудио');
+        return;
+      }
+    }
     
     // Stop any currently playing sound
     if (sourceNodeRef.current) {
@@ -449,7 +470,7 @@ const MusicNoteAnalyzer: React.FC = () => {
           
           <div className="flex space-x-2 mt-6">
             <button 
-              className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 disabled:bg-gray-400"
+              className="bg-[var(--primary)] hover:bg-[var(--primary-light)] text-white py-2 px-4 rounded transition-colors disabled:bg-gray-400"
               onClick={playNotes}
               disabled={isPlaying || activeNotes.length === 0}
             >

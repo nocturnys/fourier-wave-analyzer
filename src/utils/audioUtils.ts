@@ -526,6 +526,10 @@ export function calculateRMS(samples: Float32Array | number[]): number {
   return Math.sqrt(sumOfSquares / samples.length);
 }
 
+export function identifyNote(frequency: number): { note: string; cents: number } {
+  return getNoteFromFrequency(frequency);
+}
+
 /**
  * Safely disposes of audio resources to prevent memory leaks.
  * 

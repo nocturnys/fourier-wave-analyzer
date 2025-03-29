@@ -96,6 +96,9 @@ export function calculateFourierCoefficients(
  * @param numHarmonics Number of harmonics to include in reconstruction
  * @returns Array of points representing the reconstructed waveform
  */
+/**
+ * Reconstructs a waveform from Fourier coefficients with better accuracy
+ */
 export function reconstructWaveFromFourier(
   coefficients: FourierCoefficients,
   duration: number,
@@ -116,19 +119,19 @@ export function reconstructWaveFromFourier(
     // Start with DC component
     let value = coefficients.a0;
     
-    // Add contribution from each harmonic
+    // Add contribution from each harmonic with proper phase preservation
     for (let n = 0; n < actualHarmonics; n++) {
       const harmonicNum = n + 1;
       const an = coefficients.a[n];
       const bn = coefficients.b[n];
       const angle = 2 * Math.PI * harmonicNum * frequency * t;
       
-      // Sum the harmonic components using Fourier series formula
+      // Add the harmonic components
       value += an * Math.cos(angle) + bn * Math.sin(angle);
     }
     
     // Add point to result array
-    data.push({ t, value });
+    data.push({ t, value, frequency });
   }
   
   return data;

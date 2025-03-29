@@ -43,6 +43,7 @@ const WaveAnalyzer: React.FC = () => {
   
   // State for audio playback
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
   
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -89,44 +90,122 @@ const WaveAnalyzer: React.FC = () => {
     setReconstructedWave(reconstructed);
     
     // Prepare data for spectrum visualization
+// Inside the generateWave function after preparing spectral data
     const spectral = prepareSpectralData(coefficients);
+    console.log("Generated spectral data:", {
+      dataLength: spectral.length,
+      firstFewPoints: spectral.slice(0, 5),
+      hasValidAmplitudes: spectral.some(point => point.amplitude > 0)
+    });
     setSpectralData(spectral);
+  };
+  
+  /**
+   * Generates a wave suitable for audio playback (longer duration)
+   */
+  const generatePlaybackWave = (isOriginal: boolean): WavePoint[] => {
+    const playbackDuration = 1.0; // 1 second for audio playback
+    
+    if (isOriginal) {
+      switch (waveType) {
+        case WAVE_TYPES.SINE:
+          return generateSineWave(frequency, amplitude, playbackDuration);
+        case WAVE_TYPES.SQUARE:
+          return generateSquareWave(frequency, amplitude, playbackDuration);
+        case WAVE_TYPES.SAWTOOTH:
+          return generateSawtoothWave(frequency, amplitude, playbackDuration);
+        case WAVE_TYPES.TRIANGLE:
+          return generateTriangleWave(frequency, amplitude, playbackDuration);
+        default:
+          return generateSineWave(frequency, amplitude, playbackDuration);
+      }
+    } else {
+      // Generate reconstructed wave with proper duration for playback
+      return reconstructWaveFromFourier(
+        fourierCoefficients,
+        playbackDuration,
+        frequency,
+        numHarmonics
+      );
+    }
   };
   
   /**
    * Plays either the original wave or the reconstructed wave
    * @param isOriginal - Whether to play the original wave (true) or reconstructed wave (false)
    */
-  const playSound = (isOriginal: boolean): void => {
-    // Initialize audio context if not already done
-    if (!audioContextRef.current) {
-      // Safety check for browser environment
-      if (typeof window === 'undefined') return;
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
+  const playSound = async (isOriginal: boolean): Promise<void> => {
+    setError(''); // Clear any previous errors
     
-    // Stop any currently playing sound
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.stop();
-      sourceNodeRef.current = null;
-    }
-    
-    const audioContext = audioContextRef.current;
-    if (!audioContext) return;
-    
-    // Select which wave data to play
-    const dataToPlay = isOriginal ? waveData : reconstructedWave;
-    
-    // Create an audio buffer for playback (1 second duration)
-    const buffer = createAudioBufferFromWave(audioContext, dataToPlay, 1.0);
-    
-    // Play the sound
-    sourceNodeRef.current = playAudioBuffer(audioContext, buffer, () => {
+    try {
+      // Initialize audio context if not already done
+      if (!audioContextRef.current) {
+        // Safety check for browser environment
+        if (typeof window === 'undefined') {
+          setError('Браузерное окружение недоступно');
+          return;
+        }
+        
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+          setError('Web Audio API не поддерживается в этом браузере');
+          return;
+        }
+        
+        audioContextRef.current = new AudioContextClass();
+        console.log('AudioContext created successfully');
+      }
+      
+      const audioContext = audioContextRef.current;
+      
+      // Resume audio context if suspended (critical for browser autoplay policies)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+        console.log('AudioContext resumed successfully');
+      }
+      
+      // Stop any currently playing sound
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.stop();
+        sourceNodeRef.current = null;
+      }
+      
+      // Generate waveform data optimized for playback (longer duration)
+      const dataToPlay = generatePlaybackWave(isOriginal);
+      
+      console.log(`Playing ${isOriginal ? 'original' : 'reconstructed'} sound:`, {
+        waveType,
+        frequency,
+        amplitude,
+        samples: dataToPlay.length,
+        audioContextState: audioContext.state
+      });
+      
+      // Create an audio buffer for playback (1 second duration)
+      const buffer = createAudioBufferFromWave(audioContext, dataToPlay, 1.0);
+      
+      // Play the sound
+      sourceNodeRef.current = playAudioBuffer(audioContext, buffer, () => {
+        setIsPlaying(false);
+        sourceNodeRef.current = null;
+      });
+      
+      setIsPlaying(true);
+      
+      // Automatically stop after 2 seconds to prevent confusion
+      setTimeout(() => {
+        if (sourceNodeRef.current) {
+          sourceNodeRef.current.stop();
+          sourceNodeRef.current = null;
+          setIsPlaying(false);
+        }
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error playing sound:', error);
+      setError(`Ошибка воспроизведения: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
       setIsPlaying(false);
-      sourceNodeRef.current = null;
-    });
-    
-    setIsPlaying(true);
+    }
   };
   
   /**
@@ -134,8 +213,12 @@ const WaveAnalyzer: React.FC = () => {
    */
   const stopSound = (): void => {
     if (sourceNodeRef.current) {
-      sourceNodeRef.current.stop();
-      sourceNodeRef.current = null;
+      try {
+        sourceNodeRef.current.stop();
+        sourceNodeRef.current = null;
+      } catch (error) {
+        console.error('Error stopping sound:', error);
+      }
     }
     setIsPlaying(false);
   };
@@ -154,6 +237,11 @@ const WaveAnalyzer: React.FC = () => {
     return () => {
       if (sourceNodeRef.current) {
         sourceNodeRef.current.stop();
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(err => {
+          console.error('Error closing AudioContext:', err);
+        });
       }
     };
   }, []);
@@ -209,13 +297,19 @@ const WaveAnalyzer: React.FC = () => {
   };
   
   return (
-    <div className="p-4 bg-gray-50 min-h-screen">
+    <div className="p-4 bg-[var(--background)] min-h-screen">
       <h1 className="text-2xl font-bold mb-6 text-center">Анализатор звуковых волн на основе рядов Фурье</h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Control Panel */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
           <h2 className="text-xl font-semibold mb-4">Параметры сигнала</h2>
+          
+          {error && (
+            <div className="bg-red-100 text-red-700 p-3 rounded mb-4 border border-red-300">
+              {error}
+            </div>
+          )}
           
           <div className="mb-4">
             <label className="block mb-2">Тип волны:</label>
@@ -271,21 +365,21 @@ const WaveAnalyzer: React.FC = () => {
           
           <div className="flex space-x-2 mt-6">
             <button 
-              className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 disabled:bg-gray-400"
+              className="bg-[var(--primary)] hover:bg-[var(--primary-light)] text-white py-2 px-4 rounded transition-colors disabled:bg-gray-400"
               onClick={() => playSound(true)}
               disabled={isPlaying}
             >
               Проиграть оригинал
             </button>
             <button 
-              className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 disabled:bg-gray-400"
+              className="bg-[var(--secondary)] hover:opacity-90 text-white py-2 px-4 rounded transition-colors disabled:bg-gray-400"
               onClick={() => playSound(false)}
               disabled={isPlaying}
             >
               Проиграть реконструкцию
             </button>
             <button 
-              className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 disabled:bg-gray-400"
+              className="bg-[var(--error)] hover:opacity-90 text-white py-2 px-4 rounded transition-colors disabled:bg-gray-400"
               onClick={stopSound}
               disabled={!isPlaying}
             >
@@ -295,8 +389,10 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Spectral Analysis */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
           <SpectrumChart data={spectralData} />
+
+          
           <div className="mt-4 text-sm">
             <p><strong>Постоянная составляющая (DC):</strong> {fourierCoefficients.a0.toFixed(2)}</p>
             <p><strong>Основная гармоника:</strong> {spectralData[1]?.amplitude.toFixed(2) || 0}</p>
@@ -305,7 +401,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Original Signal Chart */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
           <WaveChart 
             data={waveData} 
             title="Исходный сигнал" 
@@ -316,7 +412,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Reconstructed Signal Chart */}
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)]">
           <WaveChart 
             data={reconstructedWave} 
             title={`Восстановленный сигнал (${numHarmonics} гармоник)`} 
@@ -327,7 +423,7 @@ const WaveAnalyzer: React.FC = () => {
         </div>
         
         {/* Explanation Section */}
-        <div className="bg-white p-4 rounded-lg shadow lg:col-span-2">
+        <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border border-[var(--card-border)] lg:col-span-2">
           <h2 className="text-xl font-semibold mb-4">О проекте</h2>
           <p className="mb-2">
             Данный интерактивный комплекс демонстрирует принципы разложения периодических звуковых волн в ряд Фурье и обратного синтеза сигнала.

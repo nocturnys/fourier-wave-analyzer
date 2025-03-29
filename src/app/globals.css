@@ -24,3 +24,33 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+:root {
+  --background: #f8f9fa;
+  --foreground: #212529;
+  --primary: #3563E9;
+  --primary-light: #6B8EFC;
+  --secondary: #16a34a;
+  --accent: #f59e0b;
+  --error: #dc2626;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #121212;
+    --foreground: #e5e7eb;
+    --primary: #6B8EFC;
+    --primary-light: #8CA8FF;
+    --card-bg: #1e1e1e;
+    --card-border: #2e2e2e;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
