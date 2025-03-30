@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MusicSpectralChart from '@/components/MusicSpectralChart';
 import { 
-  createAudioBufferFromWave, 
   identifyNote, 
   playAudioBuffer 
 } from '@/utils/audioUtils';
@@ -34,33 +33,6 @@ const MusicNoteAnalyzer: React.FC = () => {
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  
-  /**
-   * Initialize the audio context if needed
-   */
-  const initializeAudioContext = (): AudioContext | null => {
-    if (audioContextRef.current) {
-      return audioContextRef.current;
-    }
-    
-    try {
-      // Safety check for browser environment
-      if (typeof window === 'undefined') return null;
-      
-      const AudioContext = window.AudioContext || window.AudioContext;
-      if (!AudioContext) {
-        setError('Web Audio API не поддерживается вашим браузером');
-        return null;
-      }
-      
-      audioContextRef.current = new AudioContext();
-      return audioContextRef.current;
-    } catch (err) {
-      setError('Ошибка при инициализации аудиоконтекста');
-      console.error('Audio context initialization error:', err);
-      return null;
-    }
-  };
   
   /**
    * Creates an audio buffer for a single note with the specified waveform
@@ -312,14 +284,18 @@ const MusicNoteAnalyzer: React.FC = () => {
     
     // Initialize audio context
     let audioContext = audioContextRef.current;
-    if (!audioContext) {
+    if (!audioContext || audioContext.state === 'closed') { 
       try {
-        const AudioContextClass = window.AudioContext || window.AudioContext;
+        if (typeof window === 'undefined') throw new Error('Browser environment required');
+        const AudioContextClass = window.AudioContext;
+        if (!AudioContextClass) throw new Error('Web Audio API not supported');
         audioContext = new AudioContextClass();
         audioContextRef.current = audioContext;
-      } catch (err) {
-        console.error('Failed to create AudioContext:', err);
-        setError('Ошибка при инициализации аудио');
+      } catch (err: unknown) {
+        console.error('Failed to create/get AudioContext:', err);
+        // Type check before accessing message
+        const message = err instanceof Error ? err.message : String(err);
+        setError(`Ошибка аудио: ${message}`);
         return;
       }
     }
@@ -357,21 +333,25 @@ const MusicNoteAnalyzer: React.FC = () => {
       sourceNodeRef.current = playAudioBuffer(audioContext, buffer, () => {
         setIsPlaying(false);
         sourceNodeRef.current = null;
-      }, volume); // Pass the volume parameter here
+      }, volume); 
       
       setIsPlaying(true);
       
       // Stop after 2 seconds
       setTimeout(() => {
         if (sourceNodeRef.current) {
-          sourceNodeRef.current.stop();
+          try { sourceNodeRef.current.stop(); } catch /* (e) */ { // Fix: Remove unused 'e'
+            // Ignore errors if stopping already stopped node
+          }
           sourceNodeRef.current = null;
         }
         setIsPlaying(false);
       }, 2000);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error playing notes:', err);
-      setError('Ошибка при воспроизведении нот');
+      // Type check before accessing message
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Ошибка воспроизведения: ${message}`);
     }
   };
   
@@ -526,7 +506,7 @@ const MusicNoteAnalyzer: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-4 text-gray-500">
-              Нет данных для анализа. Выберите ноты и нажмите "Проиграть аккорд".
+              Нет данных для анализа. Выберите ноты и нажмите Проиграть аккорд.
             </div>
           )}
         </div>
@@ -575,7 +555,7 @@ const MusicNoteAnalyzer: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 italic">Нет данных для анализа. Выберите ноты и нажмите "Проиграть аккорд".</p>
+                <p className="text-gray-500 italic">Нет данных для анализа. Выберите ноты и нажмите Проиграть аккорд.</p>
               )}
             </div>
             
@@ -710,7 +690,7 @@ const MusicNoteAnalyzer: React.FC = () => {
             <li>Прямоугольная волна богата нечетными гармониками</li>
             <li>Пилообразная содержит и четные, и нечетные гармоники</li>
             <li>Музыкальные интервалы определяются отношением частот (например, октава - это отношение 2:1)</li>
-            <li>Отклонение показывает, насколько частота отличается от идеальной частоты ноты (1 полутон = 100 значений)</li>
+            <li>Отклонение показывает, насколько частота отличается от идеальной частоты ноты (1 полутон = 100 центов)</li>
           </ul>
         </div>
       </div>

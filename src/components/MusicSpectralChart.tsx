@@ -1,8 +1,4 @@
-import React, { useMemo } from 'react';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, ReferenceLine, Legend
-} from 'recharts';
+import React, { useMemo, useCallback } from 'react';
 import { SpectralPoint } from '@/utils/fourierTransform';
 import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
 import Plot from 'react-plotly.js';
@@ -52,7 +48,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
       frequency: point.frequency,
       amplitude: point.amplitude,
       note: Object.entries(NOTE_FREQUENCIES).find(
-        ([_, freq]) => Math.abs((point.frequency || 0) - freq) < 3
+        ([, freq]) => Math.abs((point.frequency || 0) - freq) < 3
       )?.[0] || undefined
     }));
     
@@ -122,13 +118,13 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
     
     // Calculate appropriate frequency range
     const significantPeaks = sortedPeaks.filter(p => p.amplitude > threshold * 5);
-    let highestFreq = Math.max(
+    const highestFreq = Math.max(
       ...significantPeaks.map(p => p.frequency),
       ...selectedNotes.map(note => NOTE_FREQUENCIES[note]),
       600 // Minimum default
     );
     
-    let lowestFreq = Math.min(
+    const lowestFreq = Math.min(
       ...significantPeaks.map(p => p.frequency),
       ...selectedNotes.map(note => NOTE_FREQUENCIES[note]),
       100 // Default start frequency
@@ -146,20 +142,20 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
     };
   }, [data, selectedNotes]);
 
-  // Scientific color palette that works well for spectral visualization
-  const SCIENTIFIC_COLORS = {
-    primary: 'rgb(65, 105, 225)',       // Royal Blue
+  // Fix: Wrap SCIENTIFIC_COLORS in useMemo
+  const SCIENTIFIC_COLORS = useMemo(() => ({
+    primary: 'rgb(65, 105, 225)',       
     primaryLight: 'rgba(65, 105, 225, 0.2)',
-    secondary: 'rgb(46, 139, 87)',      // Sea Green
-    highlight: 'rgb(255, 127, 0)',      // Orange
+    secondary: 'rgb(46, 139, 87)',      
+    highlight: 'rgb(255, 127, 0)',      
     peaks: [
-      'rgb(228, 26, 28)',    // Red
-      'rgb(55, 126, 184)',   // Blue
-      'rgb(77, 175, 74)',    // Green
-      'rgb(152, 78, 163)',   // Purple
-      'rgb(255, 127, 0)'     // Orange
+      'rgb(228, 26, 28)',   
+      'rgb(55, 126, 184)',  
+      'rgb(77, 175, 74)',   
+      'rgb(152, 78, 163)',  
+      'rgb(255, 127, 0)'    
     ]
-  };
+  }), []); // Empty dependency array
 
   // Prepare data for Plotly visualization
   const plotlyData = useMemo((): Data[] => {
@@ -232,6 +228,11 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
 
     return [mainTrace, ...noteTraces, ...peakTraces] as Data[];
   }, [processedData, selectedNotes, peaks, SCIENTIFIC_COLORS]);
+
+  // Define helper function outside or useCallback if needed inside component scope
+  const is880InRange = useCallback(() => {
+    return frequencyRange[1] >= 880;
+  }, [frequencyRange]);
 
   // Layout configuration for Plotly
   const plotlyLayout = useMemo((): Partial<Layout> => {
@@ -432,12 +433,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
         })).filter(isNotNullOrUndefined)
       ].filter(isNotNullOrUndefined)
     };
-  }, [height, frequencyRange, peaks, SCIENTIFIC_COLORS]);
-
-  // Helper function to check if 880Hz is in range for annotation positioning
-  function is880InRange() {
-    return frequencyRange[1] >= 880;
-  }
+  }, [height, frequencyRange, peaks, SCIENTIFIC_COLORS, is880InRange]);
 
   // Config options for Plotly
   const plotlyConfig = useMemo((): Partial<Config> => ({
@@ -532,7 +528,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
               </svg>
               <p className="mt-3 text-base text-gray-500">Нет данных для анализа</p>
-              <p className="mt-1 text-sm text-gray-400">Выберите ноты и нажмите "Проиграть аккорд"</p>
+              <p className="mt-1 text-sm text-gray-400">Выберите ноты и нажмите Проиграть аккорд</p>
             </div>
           </div>
         )}
