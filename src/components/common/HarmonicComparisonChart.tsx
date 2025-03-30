@@ -4,6 +4,9 @@ import {
   ResponsiveContainer, ReferenceLine 
 } from 'recharts';
 import { WavePoint } from '@/utils/waveGenerators';
+// Import specific types from recharts
+
+import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 /**
  * Props interface for the HarmonicComparisonChart component
@@ -83,7 +86,8 @@ const HarmonicComparisonChart: React.FC<HarmonicComparisonChartProps> = ({
     for (let i = 0; i < originalData.length; i += samplingStep) {
       const point = originalData[i];
       
-      const dataPoint: any = {
+      // Fix: Define type for dataPoint explicitly
+      const dataPoint: { t: number; original?: number; ideal?: number; [key: string]: number | undefined } = {
         t: point.t,
         original: point.value,
       };
@@ -147,17 +151,25 @@ const HarmonicComparisonChart: React.FC<HarmonicComparisonChartProps> = ({
     harmonics_50: "#B794F4"  // Purple
   }), []);
 
-  // Custom tooltip to display values - memoized to avoid recreation on each render
-  const formatTooltip = useCallback((value: number, name: string) => {
-    if (name === "original") {
-      return ["Оригинал", value.toFixed(2)];
-    } else if (name === "ideal") {
-      return ["Идеальная волна", value.toFixed(2)];
-    } else if (name.startsWith("harmonics_")) {
-      const harmonics = name.split("_")[1];
-      return [`${harmonics} гармоник`, value.toFixed(2)];
+  // Custom tooltip formatter with proper types
+  const formatTooltip = useCallback((value: ValueType, name: NameType) => {
+    // value might be string, number, or array; name might be string or number
+    const numValue = Number(value); // Convert value to number for formatting
+    const strName = String(name); // Convert name to string for checks
+
+    if (isNaN(numValue)) {
+        return [strName, String(value)]; // Return original if value isn't a number
     }
-    return [name, value.toFixed(2)];
+
+    if (strName === "original") {
+      return ["Оригинал", numValue.toFixed(2)];
+    } else if (strName === "ideal") {
+      return ["Идеальная волна", numValue.toFixed(2)];
+    } else if (strName.startsWith("harmonics_")) {
+      const harmonics = strName.split("_")[1];
+      return [`${harmonics} гармоник`, numValue.toFixed(2)];
+    }
+    return [strName, numValue.toFixed(2)];
   }, []);
 
   // Calculate y-axis domain with some padding
@@ -174,8 +186,8 @@ const HarmonicComparisonChart: React.FC<HarmonicComparisonChartProps> = ({
   // Tick formatter for x-axis - optimized with useCallback
   const formatXTick = useCallback((value: number) => value.toFixed(2), []);
   
-  // Label formatter for tooltip - optimized with useCallback
-  const labelFormatter = useCallback((label: any) => `Время: ${Number(label).toFixed(3)} с`, []);
+  // Label formatter for tooltip with proper type
+  const labelFormatter = useCallback((label: number | string) => `Время: ${Number(label).toFixed(3)} с`, []);
 
   return (
     <div className="w-full">

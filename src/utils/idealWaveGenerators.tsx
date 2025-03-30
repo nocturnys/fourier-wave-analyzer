@@ -2,7 +2,6 @@
  * Functions for generating ideal wave forms with optimized performance
  */
 import { WavePoint } from '@/utils/waveGenerators';
-import { SAMPLE_RATE } from '@/constants/audioConstants';
 
 // Cache for wave generation results
 const waveCache = new Map<string, WavePoint[]>();

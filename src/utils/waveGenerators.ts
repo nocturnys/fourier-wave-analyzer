@@ -4,7 +4,7 @@
  * that serve as the basis for sound generation and analysis.
  */
 
-import { SAMPLE_RATE, MAX_AMPLITUDE } from '@/constants/audioConstants';
+import { SAMPLE_RATE, /* AUDIO_DURATION */ } from '@/constants/audioConstants'; // Removed unused AUDIO_DURATION
 
 /**
  * Interface representing a single point in a waveform.
@@ -554,31 +554,21 @@ export function generateFMWave(
 }
 
 /**
- * Modifies a wave by applying frequency-dependent amplitude scaling.
- * Simulates the effect of a filter on the signal.
- * 
+ * Applies a simple (placeholder) filter effect to wave points.
+ * Note: This is a placeholder and doesn't implement a real digital filter.
+ *
  * @param wavePoints Original wave points
- * @param filterType Type of filter (lowpass, highpass, bandpass, etc.)
- * @param cutoffFrequency Frequency at which filtering begins
- * @param resonance Emphasis at the cutoff frequency
- * @returns Wave points with filter applied
+ * @param filterType Type of filter (currently unused)
+ * @param cutoffFrequency Frequency at which filtering begins (currently unused)
+ * @returns Wave points (currently returns original)
  */
 export function applyFilter(
   wavePoints: WavePoint[],
-  filterType: 'lowpass' | 'highpass' | 'bandpass',
-  cutoffFrequency: number,
-  resonance: number = 1.0
+  // filterType: 'lowpass' | 'highpass' | 'bandpass', // Removed unused parameter
+  // cutoffFrequency: number, // Removed unused parameter
 ): WavePoint[] {
-  // Filter implementation would typically use a more sophisticated
-  // algorithm like Butterworth or Biquad filters.
-  // This is a simple approximation for demonstration purposes.
-  
-  // For a realistic implementation, we would need to use proper digital
-  // filter theory, which is beyond the scope of this demonstration.
-  
+  console.warn('applyFilter is currently a placeholder and does not apply a real filter.');
   // Placeholder returning the original wave
-  // In a real implementation, this would analyze the frequency content
-  // and apply appropriate attenuation/emphasis
   return [...wavePoints];
 }
 

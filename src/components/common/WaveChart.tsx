@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  ResponsiveContainer, ReferenceLine 
+  ResponsiveContainer, ReferenceLine, 
+  Label
 } from 'recharts';
 import { WavePoint } from '@/utils/waveGenerators';
+// Import specific types from recharts
+import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 /**
  * Props interface for the WaveChart component
@@ -112,12 +115,22 @@ const WaveChart: React.FC<WaveChartProps> = ({
     return [-amplitude * 1.1, amplitude * 1.1];
   }, [amplitude]);
   
-  // Custom tooltip formatter to show time and amplitude with appropriate precision
-  const formatTooltip = (value: number, name: string, props: any) => {
-    if (name === "value") {
-      return [`${value.toFixed(2)}`, "Амплитуда"];
+  // Custom tooltip formatter with proper types
+  const formatTooltip = (value: ValueType, name: NameType /*, props: any*/) => {
+    // Removed unused 'props'
+    const numValue = Number(value);
+    const strName = String(name);
+
+    if (isNaN(numValue)) return [strName, String(value)];
+
+    if (strName === "value") { // Assuming primary data key is "value"
+      return [`${numValue.toFixed(2)}`, "Амплитуда"];
     }
-    return [value, name];
+    if (strName === "compareValue") { // Assuming comparison data key is "compareValue"
+        return [`${numValue.toFixed(2)}`, "Сравнение"];
+    }
+    // Add more specific formatting if needed based on actual data keys
+    return [strName, numValue.toFixed(2)];
   };
   
   // Custom label formatter for the x-axis to show time in seconds
@@ -259,7 +272,7 @@ const WaveChart: React.FC<WaveChartProps> = ({
                 domain={xDomain}
                 tickFormatter={formatXAxisTick}
               >
-                <label 
+                <Label 
                   value={xAxisLabel} 
                   position="insideBottom" 
                   offset={-10}
@@ -271,7 +284,7 @@ const WaveChart: React.FC<WaveChartProps> = ({
                 domain={yDomain}
                 tickFormatter={(value) => value.toFixed(0)}
               >
-                <label 
+                <Label 
                   value={yAxisLabel} 
                   angle={-90} 
                   position="insideLeft" 
@@ -279,7 +292,9 @@ const WaveChart: React.FC<WaveChartProps> = ({
                 />
               </YAxis>
               
-              <Tooltip formatter={formatTooltip} />
+              <Tooltip 
+                formatter={formatTooltip}
+              />
               <Legend />
               
               {/* Zero reference line */}
@@ -314,7 +329,7 @@ const WaveChart: React.FC<WaveChartProps> = ({
                 <Line
                   type="linear"
                   data={preparedCompareData}
-                  dataKey="value"
+                  dataKey="compareValue"
                   stroke={compareColor}
                   dot={showPoints}
                   name="Сравнение"

@@ -6,11 +6,17 @@ import {
 import { SpectralPoint } from '@/utils/fourierTransform';
 import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
 import Plot from 'react-plotly.js';
+import { Layout, Data, Annotations, Config } from 'plotly.js';
 
 interface MusicSpectralChartProps {
   data: SpectralPoint[];
   selectedNotes: string[];
   height?: number | string;
+}
+
+// Fix: Define helper type predicate
+function isNotNullOrUndefined<T>(input: null | undefined | T): input is T {
+    return input != null;
 }
 
 /**
@@ -27,13 +33,20 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
     if (!data || data.length === 0) return { 
       processedData: [], 
       peaks: [],
-      frequencyRange: [0, 1000]
+      frequencyRange: [20, 2000] as [number, number]
     };
     
-    // Process data points
+    // Fix: Ensure rigorous filtering for Datum[] compatibility
     const filteredData = data
-      .filter(point => point.frequency !== undefined)
-      .sort((a, b) => (a.frequency || 0) - (b.frequency || 0));
+      .filter((point): point is SpectralPoint & { frequency: number; amplitude: number } => 
+          point.frequency !== undefined && 
+          point.amplitude !== undefined &&
+          typeof point.frequency === 'number' && // Explicit type check
+          typeof point.amplitude === 'number' && // Explicit type check
+          !isNaN(point.frequency) && 
+          !isNaN(point.amplitude)
+      )
+      .sort((a, b) => a.frequency - b.frequency);
     
     const processedData = filteredData.map(point => ({
       frequency: point.frequency,
@@ -149,64 +162,65 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
   };
 
   // Prepare data for Plotly visualization
-  const plotlyData = useMemo(() => {
-    // If no data, return empty array
+  const plotlyData = useMemo((): Data[] => {
     if (processedData.length === 0) return [];
 
-    // Main spectral data trace
-    const mainTrace = {
+    const mainTrace: Partial<Plotly.ScatterData> = {
       x: processedData.map(d => d.frequency),
       y: processedData.map(d => d.amplitude),
-      type: 'scatter',
-      mode: 'lines',
+      type: 'scatter' as const,
+      mode: 'lines' as const,
       name: 'Спектр',
       line: {
         shape: 'spline',
         color: SCIENTIFIC_COLORS.primary,
         width: 2
       },
-      fill: 'tozeroy',
+      fill: 'tozeroy' as const,
       fillcolor: SCIENTIFIC_COLORS.primaryLight,
-      hoverinfo: 'x+y',
+      hoverinfo: 'x+y' as const,
       hovertemplate: '<b>Частота</b>: %{x:.1f} Гц<br><b>Амплитуда</b>: %{y:.6f}<extra></extra>'
     };
 
-    // Create traces for selected notes
-    const noteTraces = selectedNotes.map(note => {
-      const frequency = NOTE_FREQUENCIES[note];
-      const noteName = `${note} (${NOTE_NAMES_RU[note.replace(/\d/g, '')]})`;
-      
-      return {
-        x: [frequency, frequency],
-        y: [0, 0.0001], // Small vertical line
-        type: 'scatter',
-        mode: 'lines',
-        name: noteName,
-        line: {
-          color: 'rgba(65, 105, 225, 0.5)',
-          width: 1.5,
-          dash: 'dash'
-        },
-        hoverinfo: 'name+x',
-        hovertemplate: `<b>${noteName}</b>: %{x:.1f} Гц<extra></extra>`
-      };
-    });
+    // Filter potential nulls during mapping for notes
+    const noteTraces: Array<Partial<Plotly.ScatterData>> = selectedNotes
+        .map(note => {
+            const freq = NOTE_FREQUENCIES[note];
+            const noteInfo = NOTE_NAMES_RU[note.replace(/\d/g, '')];
+            if (!freq || !noteInfo) return null; // Return null if info missing
+            const noteName = `${note} (${noteInfo})`;
+            
+            return {
+                x: [freq, freq],
+                y: [0, 0.0001], // Small vertical line
+                type: 'scatter' as const,
+                mode: 'lines' as const,
+                name: noteName,
+                line: {
+                    color: 'rgba(65, 105, 225, 0.5)',
+                    width: 1.5,
+                    dash: 'dash' as const
+                },
+                hoverinfo: 'text' as const,
+                hovertemplate: `<b>${noteName}</b>: %{x:.1f} Гц<extra></extra>`
+            };
+        })
+        .filter(isNotNullOrUndefined); // Now filter works
 
-    // Create traces for detected peaks
-    const peakTraces = peaks.map((peak, index) => {
+    const peakTraces: Array<Partial<Plotly.ScatterData>> = peaks.map((peak, index) => {
       const color = SCIENTIFIC_COLORS.peaks[index % SCIENTIFIC_COLORS.peaks.length];
       
       return {
         x: [peak.frequency, peak.frequency],
         y: [0, peak.amplitude],
-        type: 'scatter',
-        mode: 'lines',
+        type: 'scatter' as const,
+        mode: 'lines' as const,
         name: `${peak.note} (${peak.nameRu})`,
         line: {
           color: color,
           width: 2
         },
-        hoverinfo: 'name+x+y',
+        hoverinfo: 'text' as const,
         hovertemplate: `
           <b>${peak.note} (${peak.nameRu})</b>${peak.cents !== 0 ? ' (' + (peak.cents > 0 ? '+' : '') + peak.cents + ' центов)' : ''}<br>
           <b>Частота</b>: %{x:.1f} Гц<br>
@@ -214,13 +228,13 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
           <extra></extra>
         `
       };
-    });
+    }).filter(isNotNullOrUndefined);
 
-    return [mainTrace, ...noteTraces, ...peakTraces];
+    return [mainTrace, ...noteTraces, ...peakTraces] as Data[];
   }, [processedData, selectedNotes, peaks, SCIENTIFIC_COLORS]);
 
   // Layout configuration for Plotly
-  const plotlyLayout = useMemo(() => {
+  const plotlyLayout = useMemo((): Partial<Layout> => {
     return {
       title: {
         text: 'Спектральный анализ музыкальных нот',
@@ -287,7 +301,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
         }
       },
       showlegend: false,
-      hovermode: 'closest',
+      hovermode: 'closest' as const,
       hoverlabel: {
         bgcolor: 'rgba(255,255,255,0.95)',
         font: {
@@ -300,53 +314,52 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
       // Add note reference lines at A4 = 440Hz and its octaves
       shapes: [
         {
-          type: 'line',
+          type: 'line' as const,
           x0: 440,
           x1: 440,
           y0: 0,
           y1: 1,
-          yref: 'paper',
+          yref: 'paper' as const,
           line: {
             color: 'rgba(200,0,0,0.3)',
             width: 1,
-            dash: 'dash'
+            dash: 'dash' as const
           }
         },
         // Add octave lines if in range
         frequencyRange[1] >= 880 ? {
-          type: 'line',
+          type: 'line' as const,
           x0: 880,
           x1: 880,
           y0: 0,
           y1: 1,
-          yref: 'paper',
+          yref: 'paper' as const,
           line: {
             color: 'rgba(200,0,0,0.2)',
             width: 1,
-            dash: 'dash'
+            dash: 'dash' as const
           }
         } : null,
         frequencyRange[0] <= 220 ? {
-          type: 'line',
+          type: 'line' as const,
           x0: 220,
           x1: 220,
           y0: 0,
           y1: 1,
-          yref: 'paper',
+          yref: 'paper' as const,
           line: {
             color: 'rgba(200,0,0,0.2)',
             width: 1,
-            dash: 'dash'
+            dash: 'dash' as const
           }
         } : null
-      ].filter(Boolean),
+      ].filter(isNotNullOrUndefined),
       annotations: [
         // Reference note label for A4 = 440Hz
         {
           x: 440,
-          y: 1,
-          xref: 'x',
-          yref: 'paper',
+          xref: 'x' as const,
+          yref: 'paper' as const,
           text: 'A4 (Ля)',
           showarrow: false,
           font: {
@@ -363,9 +376,8 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
         // Octave labels if in range
         frequencyRange[1] >= 880 ? {
           x: 880,
-          y: 0.95,
-          xref: 'x',
-          yref: 'paper',
+          xref: 'x' as const,
+          yref: 'paper' as const,
           text: 'A5 (Ля)',
           showarrow: false,
           font: {
@@ -380,9 +392,8 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
         } : null,
         frequencyRange[0] <= 220 ? {
           x: 220,
-          y: 0.95,
-          xref: 'x',
-          yref: 'paper',
+          xref: 'x' as const,
+          yref: 'paper' as const,
           text: 'A3 (Ля)',
           showarrow: false,
           font: {
@@ -396,7 +407,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
           borderpad: 1
         } : null,
         // Add peak annotations
-        ...peaks.map((peak, index) => ({
+        ...peaks.map((peak, index): Partial<Annotations> => ({
           x: peak.frequency,
           y: peak.amplitude,
           text: `${peak.note}`,
@@ -415,9 +426,11 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
           bgcolor: 'rgba(255,255,255,0.8)',
           bordercolor: 'rgba(0,0,0,0.1)',
           borderwidth: 1,
-          borderpad: 2
-        }))
-      ].filter(Boolean)
+          borderpad: 2,
+          xref: 'x' as const,
+          yref: 'y' as const
+        })).filter(isNotNullOrUndefined)
+      ].filter(isNotNullOrUndefined)
     };
   }, [height, frequencyRange, peaks, SCIENTIFIC_COLORS]);
 
@@ -427,20 +440,20 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
   }
 
   // Config options for Plotly
-  const plotlyConfig = {
+  const plotlyConfig = useMemo((): Partial<Config> => ({
     responsive: true,
     displayModeBar: true,
     modeBarButtonsToRemove: [
-      'sendDataToCloud', 'toggleSpikelines', 'hoverCompareCartesian',
-      'drawline', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape'
+      'sendDataToCloud' as const, 'toggleSpikelines' as const, 'hoverCompareCartesian' as const,
+      // Removed buttons like 'drawline' that caused issues previously
     ],
     displaylogo: false,
     toImageButtonOptions: {
-      format: 'svg', // Better for scientific publications
+      format: 'svg' as const, // Fix: Add 'as const'
       filename: 'spectral_analysis',
       scale: 2
     }
-  };
+  }), []);
 
   return (
     <div className="w-full font-sans">

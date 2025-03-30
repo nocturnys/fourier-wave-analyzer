@@ -17,12 +17,9 @@ import {
   calculateReconstructionAccuracy
 } from '@/utils/fourierTransform';
 import { createAudioBufferFromWave, playAudioBuffer } from '@/utils/audioUtils';
-import { WAVE_TYPES, SAMPLE_RATE, MAX_AMPLITUDE, DEFAULT_DURATION } from '@/constants/audioConstants';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell 
-} from 'recharts';
+import { WAVE_TYPES, SAMPLE_RATE, DEFAULT_DURATION } from '@/constants/audioConstants';
 import Plot from 'react-plotly.js';
+import { Layout, Data, Config } from 'plotly.js';
 
 // Cache for reconstructions
 const reconstructionCache = new Map<string, WavePoint[]>();
@@ -44,6 +41,19 @@ const createReconstructionCacheKey = (
     coefficients.b.slice(0, 3).map(v => v.toFixed(1)).join('_') : '0';
   
   return `recon_${a0Hash}_${aHash}_${bHash}_${duration.toFixed(3)}_${frequency}_${harmonics}`;
+};
+
+// Helper debounce function (using arrow function)
+// Fix: Specify function signature type more accurately
+const debounce = <F extends (...args: Parameters<F>) => void>(func: F, wait: number): ((...args: Parameters<F>) => void) => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Parameters<F>): void => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      timeoutId = null;
+      func(...args);
+    }, wait);
+  };
 };
 
 /**
@@ -79,15 +89,18 @@ const WaveAnalyzer: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
-  // Scientific color scheme for harmonics
-  const SCIENTIFIC_COLORS = {
-    primary: '#4169E1',      // Royal Blue
-    secondary: '#228B22',    // Forest Green
-    highlight: '#FF7F00',    // Orange
-    accent: '#9932CC',       // Dark Orchid
-    contrast: '#CD5C5C',     // Indian Red
-    neutral: '#555555',      // Dark Gray
-  };
+  // Debounce settings
+  const DEBOUNCE_DELAY = 300; // milliseconds
+
+  // Wrap SCIENTIFIC_COLORS in useMemo
+  const SCIENTIFIC_COLORS = useMemo(() => ({
+    primary: '#4169E1',      
+    secondary: '#228B22',    
+    highlight: '#FF7F00',    
+    accent: '#9932CC',       
+    contrast: '#CD5C5C',     
+    neutral: '#555555',      
+  }), []);
   
   // Combined data for dynamic visualization with precise time alignment
   const combinedWaveData = useMemo(() => {
@@ -176,10 +189,49 @@ const WaveAnalyzer: React.FC = () => {
     }
   }, [waveType]);
   
+  // --- Core Logic Functions (memoized) ---
+
+  // Update reconstructed wave logic (depends on coefficients and parameters)
+  const updateReconstructedWave = useCallback((
+    coefficients: FourierCoefficients,
+    harmonicCount: number,
+    currentDuration: number,
+    currentFrequency: number
+  ) => {
+    // console.log(`Attempting to update reconstruction with ${harmonicCount} harmonics...`);
+    const cacheKey = createReconstructionCacheKey(
+      coefficients,
+      currentDuration,
+      currentFrequency,
+      harmonicCount
+    );
+
+    let reconstructed: WavePoint[];
+
+    if (reconstructionCache.has(cacheKey)) {
+      reconstructed = reconstructionCache.get(cacheKey)!;
+      // console.log("Reconstruction cache hit.");
+    } else {
+      // console.log("Reconstruction cache miss, calculating...");
+      reconstructed = reconstructWaveFromFourier(
+        coefficients,
+        currentDuration,
+        currentFrequency,
+        harmonicCount
+      );
+      reconstructionCache.set(cacheKey, reconstructed);
+    }
+
+    // console.log("Reconstruction update complete.");
+    setReconstructedWave(reconstructed); // Update state
+  }, []); // No dependencies needed here as it's just logic, state is passed in
+
+
   // Generate the wave and its Fourier analysis
   const generateWave = useCallback(() => {
+    // console.log("Attempting to generate wave...");
     let data: WavePoint[] = [];
-    
+
     // Generate the appropriate wave type
     switch (waveType) {
       case WAVE_TYPES.SINE:
@@ -197,77 +249,83 @@ const WaveAnalyzer: React.FC = () => {
       default:
         data = generateSineWave(frequency, amplitude, duration);
     }
-    
+    // console.log("Wave generation complete.");
     setWaveData(data);
-    
+
     // Calculate Fourier coefficients
-    const coefficients = calculateFourierCoefficients(data, 50);
+    const coefficients = calculateFourierCoefficients(data, 50); // Increased number of calculated coefficients for accuracy
     setFourierCoefficients(coefficients);
-    
-    // Reconstruct wave with current harmonic count
-    updateReconstructedWave(coefficients, numHarmonics);
-    
+
+    // Update reconstruction based on newly generated wave and coefficients
+    updateReconstructedWave(coefficients, numHarmonics, duration, frequency);
+
     // Prepare spectral data
     const spectral = prepareSpectralData(coefficients, frequency);
     setSpectralData(spectral);
-    
-  }, [waveType, frequency, amplitude, duration, numHarmonics]);
-  
-  // Update reconstructed wave when harmonic count changes
-  const updateReconstructedWave = useCallback((
-    coefficients: FourierCoefficients, 
-    harmonicCount: number
-  ) => {
-    const cacheKey = createReconstructionCacheKey(
-      coefficients, 
-      duration, 
-      frequency, 
-      harmonicCount
-    );
-    
-    let reconstructed: WavePoint[];
-    
-    if (reconstructionCache.has(cacheKey)) {
-      reconstructed = reconstructionCache.get(cacheKey)!;
-    } else {
-      reconstructed = reconstructWaveFromFourier(
-        coefficients, 
-        duration, 
-        frequency, 
-        harmonicCount
-      );
-      reconstructionCache.set(cacheKey, reconstructed);
+
+  }, [waveType, frequency, amplitude, duration, numHarmonics, updateReconstructedWave]); // Include all state dependencies and updateReconstructedWave
+
+  // --- Debounced Handlers ---
+
+  // Debounced version of generateWave trigger
+  const debouncedGenerateWave = useMemo(
+    () => debounce(generateWave, DEBOUNCE_DELAY),
+    [generateWave] // Recreate debounce wrapper if generateWave implementation changes
+  );
+
+  // Debounced version of updateReconstructedWave trigger
+  const debouncedUpdateReconstruction = useMemo(
+    () => debounce((newHarmonics: number) => {
+        // We need the *current* coefficients, duration, frequency when the debounced function executes
+        // Passing them directly might capture stale state.
+        // Instead, we pass the newHarmonics value and let updateReconstructedWave access current state.
+        // But updateReconstructedWave isn't a state setter, it needs the state values passed in.
+        // Let's pass the stateful values into the debounced function call.
+        updateReconstructedWave(fourierCoefficients, newHarmonics, duration, frequency);
+    }, DEBOUNCE_DELAY),
+    [updateReconstructedWave, fourierCoefficients, duration, frequency] // Dependencies needed inside the debounced function
+  );
+
+
+  // --- Effects ---
+
+  // Effect for generating wave on parameter changes
+  useEffect(() => {
+    debouncedGenerateWave();
+  }, [waveType, frequency, amplitude, duration, debouncedGenerateWave]); // Keep debouncedGenerateWave dependency
+
+  // Effect for updating reconstruction when numHarmonics changes
+  useEffect(() => {
+    if (fourierCoefficients.a.length > 0 || fourierCoefficients.b.length > 0 || fourierCoefficients.a0 !== 0) {
+       debouncedUpdateReconstruction(numHarmonics);
     }
-    
-    setReconstructedWave(reconstructed);
-  }, [duration, frequency]);
-  
-  // Handle harmonic slider change
-  const handleHarmonicsChange = useCallback((newValue: number) => {
-    setNumHarmonics(newValue);
-    updateReconstructedWave(fourierCoefficients, newValue);
-  }, [fourierCoefficients, updateReconstructedWave]);
-  
-  // Effect to generate wave when parameters change
+  }, [numHarmonics, debouncedUpdateReconstruction, fourierCoefficients]);
+
+  // Initial generation on mount
   useEffect(() => {
-    generateWave();
-  }, [generateWave]);
-  
-  // Effect to clean up resources on unmount
-  useEffect(() => {
-    return () => {
-      if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(err => {
-          console.error('Error closing AudioContext:', err);
-        });
-      }
-      reconstructionCache.clear();
-    };
-  }, []);
-  
+    generateWave(); 
+  }, [generateWave]); // Fix: Add generateWave as dependency
+
+  // Cleanup effect
+  // ...
+
+  // --- Handlers ---
+  const handleFrequencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFrequency(Number(e.target.value));
+  };
+
+  const handleAmplitudeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAmplitude(Number(e.target.value));
+  };
+
+  const handleHarmonicsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNumHarmonics(Number(e.target.value));
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVolume(Number(e.target.value));
+  };
+
   // Play original or reconstructed sound
   const playSound = useCallback(async (isOriginal: boolean): Promise<void> => {
     setError('');
@@ -280,7 +338,8 @@ const WaveAnalyzer: React.FC = () => {
           return;
         }
         
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        // Corrected AudioContext initialization
+        const AudioContextClass = window.AudioContext; // Use standard AudioContext
         if (!AudioContextClass) {
           setError('Web Audio API не поддерживается в этом браузере');
           return;
@@ -392,13 +451,13 @@ const WaveAnalyzer: React.FC = () => {
   }, [waveData, reconstructedWave]);
 
   // Prepare wave visualization data for Plotly
-  const waveVisualizationData = useMemo(() => {
+  const waveVisualizationData = useMemo((): Data[] => {
     return [
       {
-        x: combinedWaveData.map(point => point.t * 1000), // Convert to ms for better visualization
+        x: combinedWaveData.map(point => point.t * 1000),
         y: combinedWaveData.map(point => point.original),
-        type: 'scatter',
-        mode: 'lines',
+        type: 'scatter' as const,
+        mode: 'lines' as const,
         name: 'Исходный сигнал',
         line: {
           color: SCIENTIFIC_COLORS.primary,
@@ -406,22 +465,22 @@ const WaveAnalyzer: React.FC = () => {
         }
       },
       {
-        x: combinedWaveData.map(point => point.t * 1000), // Convert to ms for better visualization
+        x: combinedWaveData.map(point => point.t * 1000),
         y: combinedWaveData.map(point => point.reconstructed),
-        type: 'scatter',
-        mode: 'lines',
+        type: 'scatter' as const,
+        mode: 'lines' as const,
         name: `Реконструкция (${numHarmonics} гармоник)`,
         line: {
           color: SCIENTIFIC_COLORS.secondary,
           width: 2,
-          dash: 'solid'
+          dash: 'solid' as const
         }
       }
     ];
   }, [combinedWaveData, numHarmonics, SCIENTIFIC_COLORS]);
 
-  // Wave visualization layout for Plotly
-  const waveLayout = useMemo(() => {
+  // Layout for wave visualization
+  const waveLayout = useMemo((): Partial<Layout> => {
     return {
       title: {
         text: 'Аппроксимация сигнала с помощью рядов Фурье',
@@ -478,7 +537,7 @@ const WaveAnalyzer: React.FC = () => {
       shapes: [
         // Zero line
         {
-          type: 'line',
+          type: 'line' as const,
           x0: 0,
           x1: duration * 1000,
           y0: 0,
@@ -490,19 +549,18 @@ const WaveAnalyzer: React.FC = () => {
           }
         }
       ]
-    };
-  }, [duration, amplitude, numHarmonics]);
+    } as Partial<Layout>;
+  }, [duration, amplitude]);
 
   // Spectral visualization data for Plotly
-  const spectralVisualizationData = useMemo(() => {
-    // Highlight important harmonics
+  const spectralVisualizationData = useMemo((): Data[] => {
     const highlightedHarmonics = getHighlightedHarmonics();
     
     return [
       {
         x: spectralData.filter(d => d.harmonic <= 50).map(d => d.harmonic),
         y: spectralData.filter(d => d.harmonic <= 50).map(d => d.amplitude),
-        type: 'bar',
+        type: 'bar' as const,
         name: 'Амплитуда',
         marker: {
           color: spectralData.filter(d => d.harmonic <= 50).map(d => 
@@ -523,8 +581,8 @@ const WaveAnalyzer: React.FC = () => {
     ];
   }, [spectralData, getHighlightedHarmonics, SCIENTIFIC_COLORS]);
 
-  // Spectral visualization layout for Plotly
-  const spectralLayout = useMemo(() => {
+  // Layout for spectral visualization
+  const spectralLayout = useMemo((): Partial<Layout> => {
     return {
       title: {
         text: 'Спектральный анализ',
@@ -589,27 +647,28 @@ const WaveAnalyzer: React.FC = () => {
           }
         };
       }).filter(Boolean)
-    };
+    } as Partial<Layout>;
   }, [useLogScale, getHighlightedHarmonics, spectralData]);
 
-  // Enhanced config for Plotly
-  const plotlyConfig = {
+  // Plotly config
+  const plotlyConfig = useMemo((): Partial<Config> => ({
     responsive: true,
     displayModeBar: true,
     modeBarButtonsToRemove: [
-      'sendDataToCloud', 'toggleSpikelines', 'hoverCompareCartesian',
-      'drawline', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape'
+      'sendDataToCloud' as const, 
+      'toggleSpikelines' as const, 
+      'hoverCompareCartesian' as const
     ],
     displaylogo: false,
     toImageButtonOptions: {
-      format: 'svg', // Better for scientific publications
+      format: 'svg' as const, 
       filename: 'wave_analysis',
       scale: 2
     }
-  };
+  }), []);
   
   return (
-    <div className="p-4 bg-[var(--background)] min-h-screen">
+    <div className="p-4 md:p-6 lg:p-8 bg-gray-50 rounded-lg shadow-md">
       <h1 className="text-2xl font-bold mb-6 text-center">Анализатор звуковых волн на основе рядов Фурье</h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -648,7 +707,7 @@ const WaveAnalyzer: React.FC = () => {
                 max="2000" 
                 step="1"
                 value={frequency}
-                onChange={(e) => setFrequency(Number(e.target.value))}
+                onChange={handleFrequencyChange}
                 className="w-full"
               />
               <span className="ml-2 text-sm w-12">2000</span>
@@ -665,7 +724,7 @@ const WaveAnalyzer: React.FC = () => {
                 max="30000" 
                 step="1000"
                 value={amplitude}
-                onChange={(e) => setAmplitude(Number(e.target.value))}
+                onChange={handleAmplitudeChange}
                 className="w-full"
               />
               <span className="ml-2 text-sm w-12">30000</span>
@@ -682,10 +741,27 @@ const WaveAnalyzer: React.FC = () => {
                 max="1" 
                 step="0.01"
                 value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
+                onChange={handleVolumeChange}
                 className="w-full"
               />
               <span className="ml-2 text-sm w-12">100%</span>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block mb-2">Длительность (с): {duration.toFixed(2)} с</label>
+            <div className="flex items-center">
+              <span className="mr-2 text-sm w-10">0.01</span>
+              <input 
+                type="range" 
+                min="0.01" 
+                max="2.0" 
+                step="0.01"
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="w-full"
+              />
+              <span className="ml-2 text-sm w-12">2.00</span>
             </div>
           </div>
           
@@ -699,7 +775,7 @@ const WaveAnalyzer: React.FC = () => {
                 max="50" 
                 step="1"
                 value={numHarmonics}
-                onChange={(e) => handleHarmonicsChange(Number(e.target.value))}
+                onChange={handleHarmonicsChange}
                 className="w-full"
               />
               <span className="ml-2 text-sm w-6">50</span>

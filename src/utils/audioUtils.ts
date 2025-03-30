@@ -4,7 +4,7 @@
  * and transforming abstract wave data into audible sound.
  */
 
-import { SAMPLE_RATE, MAX_AMPLITUDE, AUDIO_DURATION } from '@/constants/audioConstants';
+import { SAMPLE_RATE, AUDIO_DURATION } from '@/constants/audioConstants';
 import { WavePoint } from './waveGenerators';
 import { getNoteFromFrequency } from '@/constants/noteFrequencies';
 
@@ -28,8 +28,8 @@ export function createAudioContext(): AudioContext | null {
   }
   
   try {
-    // Use appropriate constructor with browser prefixes for compatibility
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    // Use standard AudioContext constructor
+    const AudioContextClass = window.AudioContext;
     if (!AudioContextClass) {
       console.error('Web Audio API not supported in this browser');
       return null;
@@ -209,7 +209,7 @@ export async function analyzeAudioSpectrum(
     sourceNode.start(0);
     
     // Render the audio to get frequency data
-    offlineContext.startRendering().then((renderedBuffer) => {
+    offlineContext.startRendering().then(() => {
       // Create arrays for frequency data
       const frequencyData = new Float32Array(analyzerNode.frequencyBinCount);
       
@@ -544,7 +544,7 @@ export function disposeAudioResources(
     try {
       source.stop();
       source.disconnect();
-    } catch (e) {
+    } catch {
       // Ignore errors if already stopped
     }
   }
@@ -553,7 +553,7 @@ export function disposeAudioResources(
   nodes.forEach(node => {
     try {
       node.disconnect();
-    } catch (e) {
+    } catch {
       // Ignore errors
     }
   });

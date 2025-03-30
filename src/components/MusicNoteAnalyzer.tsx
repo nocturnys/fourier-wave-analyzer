@@ -178,10 +178,10 @@ const MusicNoteAnalyzer: React.FC = () => {
   /**
    * Performs spectral analysis on the audio buffer
    */
-  const analyzeSpectrum = (audioContext: AudioContext, buffer: AudioBuffer): {
+  const analyzeSpectrum = (audioContext: AudioContext, buffer: AudioBuffer): Promise<{ 
     spectrum: SpectralPoint[],
     detectedNotes: Array<{ note: string; nameRu: string; frequency: number; cents: string; amplitude: number; }>
-  } => {
+  }> => {
     // Create an offline audio context for analysis
     const offlineContext = new OfflineAudioContext(
       1, 
@@ -269,12 +269,12 @@ const MusicNoteAnalyzer: React.FC = () => {
       const prev = spectrum[i - 1].amplitude;
       const current = spectrum[i].amplitude;
       const next = spectrum[i + 1].amplitude;
+      const currentFrequency = spectrum[i].frequency; // Get frequency
       
-      // A peak is where the current value is higher than both neighbors
-      // and above the threshold
-      if (current > threshold && current > prev && current > next) {
+      // Fix: Check if currentFrequency is a number
+      if (current > threshold && current > prev && current > next && typeof currentFrequency === 'number') {
         peaks.push({
-          frequency: spectrum[i].frequency,
+          frequency: currentFrequency, // Now it's confirmed to be a number
           amplitude: current
         });
       }

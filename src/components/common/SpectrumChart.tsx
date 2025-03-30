@@ -3,12 +3,19 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   ResponsiveContainer, ReferenceLine, LabelList, Cell
 } from 'recharts';
+// Import specific types from recharts
+
+import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 export interface SpectralPoint {
   harmonic: number;
   frequency?: number;
   amplitude: number;
   type?: string;
+  // Add properties used internally after processing
+  normalizedAmplitude?: number;
+  logAmplitude?: number;
+  highlighted?: boolean;
 }
 
 interface SpectrumChartProps {
@@ -16,11 +23,13 @@ interface SpectrumChartProps {
   title?: string;
   xAxisLabel?: string;
   yAxisLabel?: string;
-  showFrequency?: boolean;
+  // showFrequency prop seems unused, keeping for now in case it's needed later
+  showFrequency?: boolean; 
   maxDisplayPoints?: number;
   height?: number | string;
+  // thresholdValue and thresholdLabel seem unused, keeping for now
   thresholdValue?: number;
-  thresholdLabel?: string;
+  thresholdLabel?: string; 
   color?: string;
   highlightedHarmonics?: number[];
   highlightColor?: string;
@@ -32,18 +41,18 @@ const SpectrumChart: React.FC<SpectrumChartProps> = ({
   title = "Спектральный анализ",
   xAxisLabel = "Номер гармоники",
   yAxisLabel = "Амплитуда",
-  showFrequency = false,
+  // showFrequency, // Destructure if needed, but currently unused
   maxDisplayPoints = 50,
   height = 300,
-  thresholdValue,
-  thresholdLabel,
+  // thresholdValue, // Destructure if needed, but currently unused
+  // thresholdLabel, // Destructure if needed, but currently unused
   color = "#4f46e5",
   highlightedHarmonics = [],
   highlightColor = "#ff7300",
   useLogScale = false,
 }) => {
   // Используем useMemo для оптимизации обработки данных
-  const chartData = useMemo(() => {
+  const chartData: SpectralPoint[] = useMemo(() => {
     if (!data || data.length === 0) {
       return [];
     }
@@ -96,26 +105,33 @@ const SpectrumChart: React.FC<SpectrumChartProps> = ({
     return [0, maxYValue];
   }, [chartData, maxYValue, useLogScale]);
 
-  // Пользовательский форматтер для подсказок при наведении
-  const tooltipFormatter = (value: number, name: string, props: any) => {
-    if (name === "amplitude") {
-      return [`${value.toFixed(2)}`, "Амплитуда"];
+  // Custom tooltip formatter with proper types
+  const tooltipFormatter = (value: ValueType, name: NameType /*, payload: any*/) => {
+    // Removed unused 'props' (payload)
+    const numValue = Number(value);
+    const strName = String(name);
+
+    if (isNaN(numValue)) return [strName, String(value)];
+
+    if (strName === "amplitude") {
+      return [`${numValue.toFixed(2)}`, "Амплитуда"];
     }
-    return [value, name];
+    // Add handling for other potential data keys if necessary
+    return [strName, numValue.toFixed(2)];
   };
 
-  // Пользовательский форматтер для меток
-  const labelFormatter = (label: number) => {
-    return `Гармоника: ${label}`;
+  // Custom label formatter (harmonic number)
+  const labelFormatter = (label: number | string) => {
+    return `Гарм.: ${label}`;
   };
 
-  // Функция для определения цвета столбца в зависимости от номера гармоники
-  const getBarColor = (entry: any, index: number) => {
+  // Function to determine bar color with proper typing for entry
+  const getBarColor = (entry: SpectralPoint /*, index: number*/) => {
+    // Removed unused 'index'
     if (entry.highlighted) return highlightColor;
     
-    // Чередование оттенков для четных и нечетных гармоник
-    // Делает график более читаемым
-    return entry.harmonic % 2 === 0 ? color : `${color}99`;
+    // Alternate shades for even/odd harmonics
+    return entry.harmonic % 2 === 0 ? color : `${color}99`; // Assuming color is hex
   };
 
   return (
@@ -161,7 +177,7 @@ const SpectrumChart: React.FC<SpectrumChartProps> = ({
                 isAnimationActive={false}
               >
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getBarColor(entry, index)} />
+                  <Cell key={`cell-${index}`} fill={getBarColor(entry)} />
                 ))}
                 
                 {/* Добавляем метки для значимых гармоник */}
