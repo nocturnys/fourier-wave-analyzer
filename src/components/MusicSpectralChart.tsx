@@ -559,7 +559,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
       )}
       
       {/* Scientific information panel about harmonics */}
-      {peaks.length > 0 && (
+      {/* {peaks.length > 0 && (
         <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <h3 className="text-base font-medium text-gray-700 mb-2">Научная справка:</h3>
           <p className="text-sm text-gray-600 mb-3">
@@ -586,7 +586,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };
