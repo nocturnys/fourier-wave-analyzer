@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "fft.js": "^4.0.4",
     "next": "15.2.4",
     "plotly.js": "^3.0.1",
     "react": "^19.0.0",
