@@ -604,3 +604,80 @@ export function extractDominantHarmonics(
   // Return top N harmonics
   return harmonics.slice(0, count);
 }
+
+/**
+ * Synthesizes a waveform from spectral data by summing sine waves.
+ * Uses the top N components based on amplitude.
+ * 
+ * @param spectralData Array of spectral points (must include frequency and amplitude)
+ * @param numComponents Number of strongest components to include
+ * @param duration Duration of the output waveform in seconds
+ * @param sampleRate Sample rate for the output waveform
+ * @returns Array of points representing the synthesized waveform
+ */
+export function synthesizeWaveFromSpectralData(
+  spectralData: SpectralPoint[],
+  numComponents: number,
+  duration: number,
+  sampleRate: number
+): WavePoint[] {
+  
+  // Ensure spectralData has frequency information
+  const validSpectralData = spectralData.filter(d => typeof d.frequency === 'number');
+
+  if (validSpectralData.length === 0) {
+    console.warn("Cannot synthesize wave: Spectral data missing frequency information.");
+    return [];
+  }
+
+  // Sort components by amplitude in descending order
+  const sortedComponents = [...validSpectralData].sort((a, b) => b.amplitude - a.amplitude);
+
+  // Select the top N components
+  const topComponents = sortedComponents.slice(0, numComponents);
+
+  // Calculate number of samples for the output wave
+  const MAX_SYNTH_DURATION = 3.0; // Limit synthesis to 3 seconds to avoid performance issues
+  const synthDuration = Math.min(duration, MAX_SYNTH_DURATION);
+  let samples = Math.floor(sampleRate * synthDuration);
+
+  // Check if the number of samples is excessively large (preventing potential crashes)
+  if (samples > sampleRate * 10) { // Safety check: limit to 10 seconds max samples regardless of duration
+      console.warn(`Synthesis requested too many samples (${samples}). Limiting to ${sampleRate*10}.`);
+      samples = sampleRate * 10; 
+  }
+
+  const synthesizedWave: WavePoint[] = Array(samples).fill(null).map((_, i) => ({
+    t: i / sampleRate,
+    value: 0 // Initialize value to 0
+  }));
+
+  // Synthesize the wave by summing sine waves of the top components
+  for (const component of topComponents) {
+    const freq = component.frequency!;
+    const amp = component.amplitude;
+    // Optional: Could incorporate phase if available: const phase = component.phase || 0;
+    const phase = 0; // Assume zero phase for simplicity
+
+    // Add the contribution of this sine wave component to each sample
+    for (let i = 0; i < samples; i++) {
+      const t = synthesizedWave[i].t;
+      // We need to scale the linear amplitude from FFT back to a reasonable signal range
+      // This scaling factor is heuristic and might need adjustment based on typical FFT output.
+      // Max amplitude of a 16-bit signed integer is 32767.
+      // FFT linear amplitude might be around 0-1 for normalized signals. Let's scale it up.
+      const SCALING_FACTOR = 30000; // Adjust as needed
+      synthesizedWave[i].value += amp * SCALING_FACTOR * Math.sin(2 * Math.PI * freq * t + phase);
+    }
+  }
+
+  // Optional: Normalize the final wave to prevent clipping if needed
+  // let maxVal = 0;
+  // synthesizedWave.forEach(p => { maxVal = Math.max(maxVal, Math.abs(p.value)); });
+  // if (maxVal > 32767) {
+  //   const normFactor = 32767 / maxVal;
+  //   synthesizedWave.forEach(p => { p.value *= normFactor; });
+  // }
+
+  return synthesizedWave;
+}

@@ -80,7 +80,11 @@ export function createAudioBufferFromWave(
   }
   
   // Find maximum amplitude in the wave data for normalization
-  const maxValue = Math.max(...waveData.map(point => Math.abs(point.value)));
+  // Use reduce to avoid call stack error with large arrays
+  const maxValue = waveData.reduce((max, point) => {
+    const absValue = Math.abs(point.value);
+    return absValue > max ? absValue : max;
+  }, 0);
   
   // Normalize factor (if max is zero, use 1 to avoid division by zero)
   const normalizationFactor = maxValue > 0 ? 1 / maxValue : 1;
