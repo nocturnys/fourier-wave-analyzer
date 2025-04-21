@@ -559,36 +559,7 @@ const MusicSpectralChart: React.FC<MusicSpectralChartProps> = ({
           </div>
         </div>
       )}
-      
-      {/* Scientific information panel about harmonics */}
-      {/* {peaks.length > 0 && (
-        <div className="mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <h3 className="text-base font-medium text-gray-700 mb-2">Научная справка:</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            Спектральный анализ показывает частотный состав сигнала. Каждый пик соответствует 
-            отдельной частоте (ноте) в звуке. Высота пика отражает относительную громкость этой ноты.
-          </p>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <p className="font-medium text-gray-800">Интервал анализа</p>
-              <p className="text-gray-600">{frequencyRange[0]}-{frequencyRange[1]} Гц</p>
-            </div>
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <p className="font-medium text-gray-800">Основная нота</p>
-              <p className="text-gray-600">{peaks.length > 0 ? peaks[0].note : 'Не определена'}</p>
-            </div>
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <p className="font-medium text-gray-800">Октавное отношение</p>
-              <p className="text-gray-600">1:2 (880/440 Гц)</p>
-            </div>
-            <div className="bg-white p-3 rounded border border-gray-200">
-              <p className="font-medium text-gray-800">Квинтовое отношение</p>
-              <p className="text-gray-600">2:3 (440/660 Гц)</p>
-            </div>
-          </div>
-        </div>
-      )} */}
+
     </div>
   );
 };
