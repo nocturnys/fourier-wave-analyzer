@@ -1203,4 +1203,5 @@ const WaveAnalyzer: React.FC = () => {
   );
 };
 
+
 export default WaveAnalyzer;
