@@ -85,9 +85,21 @@ const WaveAnalyzer: React.FC = () => {
   // State for showing enhanced spectral visualization
   const [useLogScale, setUseLogScale] = useState<boolean>(false);
   
+  // State for multiple harmonics reconstructions
+  const [multiHarmonicReconstructions, setMultiHarmonicReconstructions] = useState<Array<{
+    data: WavePoint[];
+    harmonics: number;
+  }>>([]);
+  
   // Refs for Web Audio API objects
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  interface CombinedWavePoint {
+    t: number;
+    original: number;
+    [key: string]: number; // Это позволит иметь динамические свойства вида harmonic_1, harmonic_2, и т.д.
+  }
 
   // Debounce settings
   const DEBOUNCE_DELAY = 300; // milliseconds
@@ -102,64 +114,91 @@ const WaveAnalyzer: React.FC = () => {
     neutral: '#555555',      
   }), []);
   
-  // Combined data for dynamic visualization with precise time alignment
-  const combinedWaveData = useMemo(() => {
-    // Create a combined dataset with original and reconstructed waves
-    if (!waveData.length || !reconstructedWave.length) return [];
+  // Функция для прямой генерации данных волны для отображения, с плавными аппроксимациями
+  const generateCombinedWaveData = useCallback(() => {
+    // Определяем количество точек для плавного отображения
+    const pointCount = 1000;
+    const timeRange = duration;
     
-    // Create a unified time grid to ensure perfect alignment
-    const startTime = 0;
-    const endTime = duration;
-    const maxPoints = 1000; // Higher resolution for smoother curves
-    const timeStep = (endTime - startTime) / maxPoints;
+    const result: CombinedWavePoint[] = [];
     
-    const result = [];
-    
-    // Use interpolation to sample both waves at exactly the same time points
-    for (let i = 0; i <= maxPoints; i++) {
-      const t = startTime + i * timeStep;
+    for (let i = 0; i < pointCount; i++) {
+      const t = (i / pointCount) * timeRange;
+      const angle = 1.5 + 2 * Math.PI * frequency * t;
+      const angle2 = 2 * Math.PI * frequency * t;
       
-      // Find nearest points in original data
-      const origIndex = waveData.findIndex(p => p.t >= t);
-      let originalValue = null;
+      // Вычисляем оригинальное значение сигнала
+      let originalValue: number = 0;
       
-      if (origIndex > 0) {
-        // Linear interpolation between points for smoother rendering
-        const p1 = waveData[origIndex - 1];
-        const p2 = waveData[origIndex];
-        const factor = (t - p1.t) / (p2.t - p1.t);
-        originalValue = p1.value + factor * (p2.value - p1.value);
-      } else if (origIndex === 0) {
-        originalValue = waveData[0].value;
-      } else if (origIndex === -1 && waveData.length > 0) {
-        originalValue = waveData[waveData.length - 1].value;
+      if (waveType === WAVE_TYPES.SINE) {
+        originalValue = amplitude * Math.sin(angle);
+      } else if (waveType === WAVE_TYPES.SQUARE) {
+        originalValue = amplitude * (Math.sin(angle) >= 0 ? 1 : -1);
+      } else if (waveType === WAVE_TYPES.SAWTOOTH) {
+        // Важно! Формула пилообразной волны должна быть синхронизирована с аппроксимацией
+        const normalized = (t * frequency) % 1;
+        originalValue = amplitude * (2 * normalized - 1);
+      } else if (waveType === WAVE_TYPES.TRIANGLE) {
+        // Важно! Формула треугольной волны должна быть синхронизирована с аппроксимацией
+        const normalized = (t * frequency) % 1;
+        originalValue = amplitude * (normalized < 0.5 
+          ? (4 * normalized - 1) 
+          : (3 - 4 * normalized));
       }
       
-      // Find nearest points in reconstructed data
-      const reconIndex = reconstructedWave.findIndex(p => p.t >= t);
-      let reconstructedValue = null;
+      // Создаем объект с точкой времени и оригинальным значением
+      const point: CombinedWavePoint = { t, original: originalValue };
       
-      if (reconIndex > 0) {
-        // Linear interpolation between points
-        const p1 = reconstructedWave[reconIndex - 1];
-        const p2 = reconstructedWave[reconIndex];
-        const factor = (t - p1.t) / (p2.t - p1.t);
-        reconstructedValue = p1.value + factor * (p2.value - p1.value);
-      } else if (reconIndex === 0) {
-        reconstructedValue = reconstructedWave[0].value;
-      } else if (reconIndex === -1 && reconstructedWave.length > 0) {
-        reconstructedValue = reconstructedWave[reconstructedWave.length - 1].value;
-      }
+      // Добавляем аппроксимации для разных уровней гармоник
+      const harmonicLevels = [1, 3, 5, 10, 20, numHarmonics];
+      const uniqueLevels = [...new Set(harmonicLevels)].sort((a, b) => a - b);
       
-      result.push({
-        t,
-        original: originalValue,
-        reconstructed: reconstructedValue
+      uniqueLevels.forEach(harmCount => {
+        // Рассчитываем аппроксимацию напрямую по формулам Фурье
+        let approximatedValue: number = 0;
+        
+        if (waveType === WAVE_TYPES.SINE) {
+          // Синусоида точно представляется одной гармоникой
+          approximatedValue = harmCount >= 1 ? originalValue : 0;
+        } 
+        else if (waveType === WAVE_TYPES.SQUARE) {
+          // Прямоугольная волна: сумма нечетных гармоник
+          for (let n = 1; n <= harmCount * 2; n += 2) {
+            approximatedValue += (4 * amplitude / (n * Math.PI)) * 
+                                Math.sin(n * angle);
+          }
+        } 
+        else if (waveType === WAVE_TYPES.SAWTOOTH) {
+          // Пилообразная волна: сумма всех гармоник
+          // ИСПРАВЛЕНИЕ: Убираем сдвиг фазы -Math.PI/2, который вызывал рассинхронизацию
+          for (let n = 1; n <= harmCount; n++) {
+            approximatedValue += (2 * amplitude / (n * Math.PI)) * 
+                                Math.sin(n * angle2) * -1;
+          }
+        } 
+        else if (waveType === WAVE_TYPES.TRIANGLE) {
+          // Треугольная волна: сумма нечетных гармоник с быстрым убыванием
+          for (let n = 1; n <= harmCount * 2; n += 2) {
+            const sign = -Math.pow(-1, (n - 1) / 2); // Инвертируем знак функции
+            approximatedValue += (8 * amplitude / Math.pow(n * Math.PI, 2)) * 
+                                Math.sin(n * angle) * sign;
+          }
+        }
+        
+        // Добавляем значение для этого уровня гармоник
+        point[`harmonic_${harmCount}`] = approximatedValue;
       });
+      
+      result.push(point);
     }
     
     return result;
-  }, [waveData, reconstructedWave, duration]);
+  }, [waveType, frequency, amplitude, duration, numHarmonics]);
+  
+  // Используем новый метод генерации данных для комбинированного отображения
+  const combinedWaveData = useMemo(() => {
+    return generateCombinedWaveData();
+  }, [generateCombinedWaveData]);
   
   // Get explanation text for current wave type
   const waveExplanation = useMemo(() => {
@@ -286,6 +325,42 @@ const WaveAnalyzer: React.FC = () => {
     [updateReconstructedWave, fourierCoefficients, duration, frequency] // Dependencies needed inside the debounced function
   );
 
+  // Effect for creating multiple harmonic reconstructions
+  useEffect(() => {
+    if (fourierCoefficients.a.length > 0 || fourierCoefficients.b.length > 0 || fourierCoefficients.a0 !== 0) {
+      const harmonicLevels = [1, 3, 5, 10, 20, numHarmonics];
+      // Убираем дубликаты
+      const uniqueLevels = [...new Set(harmonicLevels)].sort((a, b) => a - b);
+      
+      // Создаем реконструкции для каждого уровня гармоник
+      const reconstructions = uniqueLevels.map(harmonics => {
+        // Используем кэш, если возможно
+        const cacheKey = createReconstructionCacheKey(
+          fourierCoefficients, 
+          duration, 
+          frequency, 
+          harmonics
+        );
+        
+        let data: WavePoint[];
+        if (reconstructionCache.has(cacheKey)) {
+          data = reconstructionCache.get(cacheKey)!;
+        } else {
+          data = reconstructWaveFromFourier(
+            fourierCoefficients, 
+            duration, 
+            frequency, 
+            harmonics
+          );
+          reconstructionCache.set(cacheKey, data);
+        }
+        
+        return { data, harmonics };
+      });
+      
+      setMultiHarmonicReconstructions(reconstructions);
+    }
+  }, [fourierCoefficients, duration, frequency, numHarmonics]);
 
   // --- Effects ---
 
@@ -307,7 +382,17 @@ const WaveAnalyzer: React.FC = () => {
   }, [generateWave]); // Fix: Add generateWave as dependency
 
   // Cleanup effect
-  // ...
+  useEffect(() => {
+    return () => {
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.stop();
+        sourceNodeRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   // --- Handlers ---
   const handleFrequencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,7 +537,8 @@ const WaveAnalyzer: React.FC = () => {
 
   // Prepare wave visualization data for Plotly
   const waveVisualizationData = useMemo((): Data[] => {
-    return [
+    // Сначала добавляем оригинальную волну
+    const data: Data[] = [
       {
         x: combinedWaveData.map(point => point.t * 1000),
         y: combinedWaveData.map(point => point.original),
@@ -461,22 +547,47 @@ const WaveAnalyzer: React.FC = () => {
         name: 'Исходный сигнал',
         line: {
           color: SCIENTIFIC_COLORS.primary,
-          width: 2
-        }
-      },
-      {
-        x: combinedWaveData.map(point => point.t * 1000),
-        y: combinedWaveData.map(point => point.reconstructed),
-        type: 'scatter' as const,
-        mode: 'lines' as const,
-        name: `Реконструкция (${numHarmonics} гармоник)`,
-        line: {
-          color: SCIENTIFIC_COLORS.secondary,
           width: 2,
-          dash: 'solid' as const
+          shape: 'spline' // Добавляем сглаживание линий
         }
       }
     ];
+    
+    // Добавляем все реконструкции с разным количеством гармоник
+    // Выбираем разные цвета для разных уровней гармоник
+    const colors = [
+      '#3182CE', // Синий
+      '#F6AD55', // Оранжевый
+      '#68D391', // Зеленый
+      '#4FD1C5', // Бирюзовый
+      '#F687B3', // Розовый
+      SCIENTIFIC_COLORS.secondary // Зеленый из ваших научных цветов для текущей настройки гармоник
+    ];
+    
+    // Получаем уникальные уровни гармоник
+    const harmonicLevels = [1, 3, 5, 10, 20, numHarmonics];
+    const uniqueLevels = [...new Set(harmonicLevels)].sort((a, b) => a - b);
+    
+    // Добавляем линии для каждой реконструкции
+    uniqueLevels.forEach((harmCount, index) => {
+      const isCurrentSelected = harmCount === numHarmonics;
+      
+      data.push({
+        x: combinedWaveData.map(point => point.t * 1000),
+        y: combinedWaveData.map(point => point[`harmonic_${harmCount}`]),
+        type: 'scatter' as const,
+        mode: 'lines' as const,
+        name: `${harmCount} гармоник${harmCount > 4 ? "" : "и"}`,
+        line: {
+          color: colors[index % colors.length],
+          width: isCurrentSelected ? 2 : 1.5,
+          dash: isCurrentSelected ? 'solid' : 'dash',
+          shape: 'spline' // Добавляем сглаживание для всех линий
+        }
+      });
+    });
+    
+    return data;
   }, [combinedWaveData, numHarmonics, SCIENTIFIC_COLORS]);
 
   // Layout for wave visualization
@@ -532,7 +643,9 @@ const WaveAnalyzer: React.FC = () => {
         y: 0.99,
         bgcolor: 'rgba(255,255,255,0.7)',
         bordercolor: 'rgba(0,0,0,0.1)',
-        borderwidth: 1
+        borderwidth: 1,
+        orientation: 'h' as 'h', // горизонтальная легенда
+        font: { size: 10 } // меньший шрифт для компактности
       },
       shapes: [
         // Zero line
@@ -787,6 +900,25 @@ const WaveAnalyzer: React.FC = () => {
           </div>
           
           <div className="mb-4">
+            <label className="block mb-2">Отображаемые гармоники:</label>
+            <div className="flex flex-wrap gap-2">
+              {multiHarmonicReconstructions.map((recon) => (
+                <span 
+                  key={recon.harmonics}
+                  className={`px-3 py-1 rounded-full text-sm cursor-pointer ${
+                    recon.harmonics === numHarmonics 
+                      ? 'bg-[var(--primary)] text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                  onClick={() => setNumHarmonics(recon.harmonics)}
+                >
+                  {recon.harmonics}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          <div className="mb-4">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input 
                 type="checkbox" 
@@ -896,6 +1028,46 @@ const WaveAnalyzer: React.FC = () => {
               <p className="text-gray-500">Генерируем данные...</p>
             </div>
           )}
+          
+          <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border mt-4">
+            <h3 className="text-lg font-semibold mb-3">Сравнение аппроксимаций</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Этот график показывает как увеличение количества гармоник улучшает 
+              качество аппроксимации исходного сигнала.
+            </p>
+            
+            <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  {multiHarmonicReconstructions.map((recon, index) => (
+                    <div key={recon.harmonics} className="flex items-center">
+                      <span 
+                        className="inline-block w-4 h-1 mr-1" 
+                        style={{
+                          backgroundColor: index === multiHarmonicReconstructions.length - 1 
+                            ? SCIENTIFIC_COLORS.secondary 
+                            : ['#3182CE', '#F6AD55', '#68D391', '#4FD1C5', '#F687B3'][index % 5]
+                        }}
+                      ></span>
+                      <span className="text-xs">{recon.harmonics}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {waveType === 'Синусоида' 
+                    ? 'Синусоида - идеальная с 1 гармоникой'
+                    : `${
+                        waveType === 'Прямоугольная' 
+                          ? 'Нечетные гармоники (1/n)' 
+                          : waveType === 'Пилообразная'
+                            ? 'Все гармоники (1/n)'
+                            : 'Нечетные гармоники (1/n²)'
+                      }`
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
           
           <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-300">
             <h3 className="font-medium text-gray-800 mb-2">Интерпретация гармонического анализа:</h3>
@@ -1030,5 +1202,6 @@ const WaveAnalyzer: React.FC = () => {
     </div>
   );
 };
+
 
 export default WaveAnalyzer;
