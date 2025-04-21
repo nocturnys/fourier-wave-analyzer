@@ -644,7 +644,7 @@ const WaveAnalyzer: React.FC = () => {
         bgcolor: 'rgba(255,255,255,0.7)',
         bordercolor: 'rgba(0,0,0,0.1)',
         borderwidth: 1,
-        orientation: 'h' as 'h', // горизонтальная легенда
+        orientation: 'h', // горизонтальная легенда
         font: { size: 10 } // меньший шрифт для компактности
       },
       shapes: [
