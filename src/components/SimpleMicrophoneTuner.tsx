@@ -42,6 +42,13 @@ const SimpleMicrophoneTuner: React.FC = () => {
   // Функция для запуска тюнера
   const startTuner = async () => {
     try {
+      // Если тюнер уже активен, останавливаем его
+      if (isActive) {
+        console.log("Тюнер уже активен, останавливаем");
+        stopTuner();
+        return;
+      }
+      
       setError('');
       setDetectedNote(null); // Сбрасываем предыдущую ноту
       
@@ -51,9 +58,6 @@ const SimpleMicrophoneTuner: React.FC = () => {
       
       // Также обновляем состояние React для UI
       setIsActive(true);
-      
-      // Остановка предыдущей сессии, если была
-      stopTuner();
       
       console.log("Запуск тюнера...");
       
@@ -81,7 +85,6 @@ const SimpleMicrophoneTuner: React.FC = () => {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-          
         }
       });
       
@@ -132,16 +135,10 @@ const SimpleMicrophoneTuner: React.FC = () => {
         console.warn("Тест записи не удался:", e);
       }
       
-      // Проверяем флаг активности
+      // Запускаем анализ синхронно
       console.log("Запуск анализа звука... isActiveRef=", isActiveRef.current);
+      analyzeSound();
       
-      // Немедленный запуск анализа, используя ref вместо состояния
-      if (isActiveRef.current) {
-        // Запускаем функцию анализа синхронно
-        window.requestAnimationFrame(() => {
-          analyzeSound();
-        });
-      }
     } catch (err) {
       console.error("Ошибка запуска тюнера:", err);
       setError(`Ошибка: ${err instanceof Error ? err.message : 'Невозможно получить доступ к микрофону'}`);
@@ -153,18 +150,41 @@ const SimpleMicrophoneTuner: React.FC = () => {
 
   // Функция для остановки тюнера
   const stopTuner = () => {
+    console.log("Остановка тюнера...");
+    
+    // Обновляем состояния
     setIsActive(false);
+    isActiveRef.current = false;
     
     // Остановка анализа
     if (animationFrameRef.current) {
+      console.log("Отменяем animationFrame:", animationFrameRef.current);
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
     
     // Остановка микрофона
     if (microphoneStreamRef.current) {
-      microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+      console.log("Останавливаем треки микрофона");
+      microphoneStreamRef.current.getTracks().forEach(track => {
+        console.log("Останавливаем трек:", track.kind, track.label);
+        track.stop();
+      });
       microphoneStreamRef.current = null;
+    }
+    
+    // Закрытие AudioContext
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try {
+        audioContextRef.current.close().then(() => {
+          console.log("AudioContext закрыт");
+          audioContextRef.current = null;
+        }).catch(err => {
+          console.error("Ошибка при закрытии AudioContext:", err);
+        });
+      } catch (e) {
+        console.warn("Ошибка при закрытии AudioContext:", e);
+      }
     }
     
     // Обнуление данных
@@ -172,7 +192,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
     setVolume(0);
   };
 
-  // НОВАЯ функция для анализа звука, использующая ref вместо состояния
+  // Функция для анализа звука, использующая ref вместо состояния
   const analyzeSound = () => {
     // Проверяем флаг активности через ref
     if (!isActiveRef.current) {
@@ -463,7 +483,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
                 ? 'bg-red-500 hover:bg-red-600' 
                 : 'bg-[var(--primary)] hover:bg-[var(--primary-light)]'
             }`}
-            onClick={isActive ? stopTuner : startTuner}
+            onClick={startTuner}
           >
             {isActive ? 'Остановить' : 'Начать настройку'}
           </button>
@@ -480,33 +500,6 @@ const SimpleMicrophoneTuner: React.FC = () => {
             </span>
           </div>
         </div>
-        
-        {/* <div className="mb-4">
-          <label className="block mb-2">Эталонная частота (A4):</label>
-          <div className="flex items-center">
-            <button
-              className="bg-gray-200 px-3 py-1 rounded-l"
-              onClick={() => setReferenceFrequency(prev => Math.max(430, prev - 1))}
-            >
-              -
-            </button>
-            <input 
-              type="number" 
-              min="430" 
-              max="450"
-              value={referenceFrequency}
-              onChange={(e) => setReferenceFrequency(Number(e.target.value))}
-              className="w-20 text-center border-t border-b border-gray-300 py-1"
-            />
-            <button
-              className="bg-gray-200 px-3 py-1 rounded-r"
-              onClick={() => setReferenceFrequency(prev => Math.min(450, prev + 1))}
-            >
-              +
-            </button>
-            <span className="ml-2">Гц</span>
-          </div>
-        </div> */}
         
         {/* Улучшенный индикатор громкости */}
         <div className="mb-4">
@@ -634,7 +627,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
           <li>Извлеките звук на вашем инструменте</li>
           <li>Тюнер определит ближайшую ноту и покажет насколько точно она настроена</li>
           <li>Следуйте указаниям стрелок для корректировки настройки</li>
-          
+          <li>Нажмите кнопку Остановить, когда закончите настройку</li>
         </ol>
         
         <div className="mt-4 text-sm text-gray-600">
