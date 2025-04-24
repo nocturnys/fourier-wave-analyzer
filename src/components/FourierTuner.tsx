@@ -6,9 +6,16 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, JSX } from 'react';
 import { NOTE_NAMES_RU } from '@/constants/noteFrequencies';
-import Plot from 'react-plotly.js';
+import dynamic from 'next/dynamic';
+import { ArrowDown, ArrowUp, Check, Mic, Volume2, Radio } from 'lucide-react';
+
+// Динамический импорт Plotly для предотвращения ошибок SSR
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+  loading: () => <div className="text-center py-8 text-gray-500">Loading graph...</div>
+});
 
 // Определяем типы для использования webkitAudioContext
 declare global {
@@ -474,16 +481,16 @@ const FourierTuner: React.FC = () => {
     }
   };
 
-  // Функция для получения направления настройки
-  const getTuningDirection = (): string => {
-    if (!detectedNote) return '–';
+  // Улучшенная функция для отображения направления настройки с иконками
+  const getTuningDirectionIcon = (): JSX.Element => {
+    if (!detectedNote) return <span className="text-gray-400">—</span>;
     
     if (detectedNote.cents < -5) {
-      return '↓'; // Слишком низко, нужно подтянуть
+      return <ArrowDown className="text-red-500 w-12 h-12" />; // Увеличил размер с w-10 h-10 до w-12 h-12
     } else if (detectedNote.cents > 5) {
-      return '↑'; // Слишком высоко, нужно опустить
+      return <ArrowUp className="text-red-500 w-12 h-12" />; // Увеличил размер
     } else {
-      return '✓'; // В настройке
+      return <Check className="text-green-500 w-12 h-12" />; // Увеличил размер
     }
   };
 
@@ -496,7 +503,6 @@ const FourierTuner: React.FC = () => {
 
   // Получение данных о настройке
   const tuningStatus = getTuningStatus();
-  const tuningDirection = getTuningDirection();
   
   // Данные для графика спектра
   const spectralPlotData = useMemo(() => {
@@ -524,7 +530,7 @@ const FourierTuner: React.FC = () => {
     ];
   }, [spectrumData, frequencyAxis]);
   
-  // Конфигурация графика спектра
+  // Конфигурация графика спектра с исправленным type
   const spectralPlotLayout = {
     title: 'Спектр сигнала (Преобразование Фурье)',
     xaxis: {
@@ -533,7 +539,7 @@ const FourierTuner: React.FC = () => {
     },
     yaxis: {
       title: 'Амплитуда',
-      type: 'log' as const // Логарифмическая шкала для лучшей видимости
+      type: 'log' as const // Исправлено: используем 'as const' вместо 'as log'
     },
     height: 300,
     margin: { l: 60, r: 30, t: 50, b: 50 }
@@ -578,15 +584,17 @@ const FourierTuner: React.FC = () => {
         {/* Улучшенный индикатор громкости */}
         <div className="mb-4">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Тихо</span>
+            <span className="flex items-center">
+              <Volume2 className="w-4 h-4 mr-1" />
+              Тихо
+            </span>
             <span>Громко</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-4 relative">
+          <div className="w-full bg-gray-200 rounded-full h-4 relative overflow-hidden">
             <div 
-              className="bg-blue-600 h-4 rounded-full transition-all duration-100"
+              className="bg-gradient-to-r from-blue-400 to-blue-600 h-4 transition-all duration-100"
               style={{ width: `${Math.min(100, volume * 100)}%` }}
             ></div>
-            {/* Порог определения высоты */}
             <div className="absolute h-full w-0.5 bg-red-500" style={{ left: '1%', top: 0 }}></div>
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -632,14 +640,18 @@ const FourierTuner: React.FC = () => {
       </div>
       
       {/* Tuning Display */}
-      <div className="bg-white p-6 rounded-lg shadow mb-6 text-center">
+      <div className="bg-white border border-gray-400 p-6 rounded-lg shadow mb-6 text-center">
         {detectedNote ? (
           <>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-12">
               <div className="text-4xl font-bold text-gray-500">
                 {detectedNote.note.replace(/\d/g, '')}
               </div>
-              <div className="text-6xl font-bold" style={{ color: tuningStatus.color }}>
+              <div className="text-6xl font-bold rounded-lg py-2 px-6" 
+                  style={{ 
+                    color: tuningStatus.color,
+                    backgroundColor: `${tuningStatus.color}10` // Светлый фон того же цвета
+                  }}>
                 {detectedNote.nameRu.replace(/\d/g, '')}
                 <span className="text-3xl ml-1">{detectedNote.note.match(/\d+/)?.[0] || ''}</span>
               </div>
@@ -648,42 +660,38 @@ const FourierTuner: React.FC = () => {
               </div>
             </div>
             
-            {/* Tuning Meter */}
-            <div className="relative h-24 mb-4">
-              <div className="absolute top-0 left-0 w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                {/* Center line */}
-                <div className="absolute top-0 left-1/2 w-1 h-full bg-green-500 transform -translate-x-1/2"></div>
+            {/* Улучшенный индикатор настройки */}
+            <div className="relative p-6  rounded-lg h-36 mb-12"> {/* Увеличил высоту контейнера с h-24 до h-32 */}
+                <div className="absolute top-0 left-0 w-full h-10 bg-gray-100 rounded-full overflow-hidden border border-gray-300 shadow-inner"> {/* Добавил border и увеличил высоту с h-8 до h-10 */}
+                    {/* Отметки шкалы */}
+                    {Array.from({ length: 11 }).map((_, i) => (
+                    <div 
+                        key={i} 
+                        className={`absolute top-0 h-full w-px ${i === 5 ? 'bg-green-500' : 'bg-gray-300'}`} 
+                        style={{ left: `${i * 10}%` }}
+                    />
+                    ))}
+                    
+                    {/* Индикатор настройки - сделал более заметным */}
+                    <div 
+                    className="absolute top-1 h-8 bg-blue-500 shadow-lg transition-all duration-300 w-8 rounded-full border-2 border-white"
+                    style={{ 
+                        left: `calc(50% + ${detectedNote.cents * 2}px)`,
+                        transform: 'translateX(-50%)'
+                    }}
+                    />
+                </div>
                 
-                {/* Tuning indicator */}
-                <div 
-                  className="absolute top-0 h-full bg-blue-500 transition-all duration-300 w-4 rounded-full"
-                  style={{ 
-                    left: `calc(50% + ${detectedNote.cents * 2}px)`,
-                    transform: 'translateX(-50%)'
-                  }}
-                ></div>
-                
-                {/* Scale markers */}
-                <div className="absolute top-full mt-2 w-full flex justify-between px-4 text-xs text-gray-500">
-                  <span>-50</span>
-                  <span>-30</span>
-                  <span>-10</span>
-                  <span>0</span>
-                  <span>+10</span>
-                  <span>+30</span>
-                  <span>+50</span>
+                {/* Увеличил отступ сверху, чтобы стрелки были видны хорошо */}
+                <div className="mt-16 text-center"> {/* Изменил mt-12 на mt-16 */}
+                    <div className="flex justify-center">
+                    {getTuningDirectionIcon()}
+                    </div>
+                    <div className="mt-2 text-xl">
+                    {detectedNote.cents > 0 ? '+' : ''}{detectedNote.cents.toFixed(0)} центов
+                    </div>
                 </div>
-              </div>
-              
-              <div className="mt-12 text-center">
-                <div className="text-5xl font-bold" style={{ color: tuningStatus.color }}>
-                  {tuningDirection}
                 </div>
-                <div className="mt-2 text-xl">
-                  {detectedNote.cents > 0 ? '+' : ''}{detectedNote.cents.toFixed(0)} центов
-                </div>
-              </div>
-            </div>
             
             {/* Гармонический анализ */}
             {harmonics.length > 0 && (
@@ -739,16 +747,12 @@ const FourierTuner: React.FC = () => {
           <div className="py-12 text-gray-500">
             {isActive ? (
               <>
-                <svg className="mx-auto w-16 h-16 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                </svg>
+                <Mic className="mx-auto w-16 h-16 text-blue-500 animate-pulse" />
                 <p className="mt-4 text-xl">Извлеките звук на инструменте...</p>
               </>
             ) : (
               <>
-                <svg className="mx-auto w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 01-.707-7.07m-2.122 9.9a9 9 0 010-12.728"></path>
-                </svg>
+                <Radio className="mx-auto w-16 h-16 text-gray-500" />
                 <p className="mt-4 text-xl">Нажмите Начать анализ для активации микрофона</p>
               </>
             )}
