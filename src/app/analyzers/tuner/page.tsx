@@ -1,5 +1,5 @@
+import FourierTuner from '@/components/FourierTuner';
 import Link from 'next/link';
-import ClientSimpleTunerWrapper from '@/components/ClientSimpleTunerWrapper';
 
 export default function TunerPage() {
   return (
@@ -10,8 +10,8 @@ export default function TunerPage() {
         </Link>
       </div>
       
-      {/* Render the client component wrapper */}
-      <ClientSimpleTunerWrapper />
+      {/* Используем новый компонент Фурье-тюнера */}
+      <FourierTuner />
     </div>
   );
 }

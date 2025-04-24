@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 
 // Динамически импортируем компонент тюнера с отключенным SSR
-const SimpleMicrophoneTuner = dynamic(() => import('@/components/SimpleMicrophoneTuner'), {
+const FourierTuner = dynamic(() => import('@/components/FourierTuner'), {
     ssr: false,
     loading: () => <div className="text-center p-10">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -49,5 +49,5 @@ export default function ClientSimpleTunerWrapper() {
     }
     
     // Если браузер совместим, рендерим компонент тюнера
-    return <SimpleMicrophoneTuner />;
+    return <FourierTuner />;
 }
