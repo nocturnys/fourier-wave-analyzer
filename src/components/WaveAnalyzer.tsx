@@ -536,59 +536,41 @@ const WaveAnalyzer: React.FC = () => {
   }, [waveData, reconstructedWave]);
 
   // Prepare wave visualization data for Plotly
-  const waveVisualizationData = useMemo((): Data[] => {
-    // Сначала добавляем оригинальную волну
-    const data: Data[] = [
-      {
-        x: combinedWaveData.map(point => point.t * 1000),
-        y: combinedWaveData.map(point => point.original),
-        type: 'scatter' as const,
-        mode: 'lines' as const,
-        name: 'Исходный сигнал',
-        line: {
-          color: SCIENTIFIC_COLORS.primary,
-          width: 2,
-          shape: 'spline' // Добавляем сглаживание линий
-        }
+// Prepare wave visualization data for Plotly
+const waveVisualizationData = useMemo((): Data[] => {
+  // Сначала добавляем оригинальную волну
+  const data: Data[] = [
+    {
+      x: combinedWaveData.map(point => point.t * 1000),
+      y: combinedWaveData.map(point => point.original),
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Исходный сигнал',
+      line: {
+        color: SCIENTIFIC_COLORS.primary,
+        width: 2,
+        shape: 'spline' // Добавляем сглаживание линий
       }
-    ];
-    
-    // Добавляем все реконструкции с разным количеством гармоник
-    // Выбираем разные цвета для разных уровней гармоник
-    const colors = [
-      '#3182CE', // Синий
-      '#F6AD55', // Оранжевый
-      '#68D391', // Зеленый
-      '#4FD1C5', // Бирюзовый
-      '#F687B3', // Розовый
-      SCIENTIFIC_COLORS.secondary // Зеленый из ваших научных цветов для текущей настройки гармоник
-    ];
-    
-    // Получаем уникальные уровни гармоник
-    const harmonicLevels = [1, 3, 5, 10, 20, numHarmonics];
-    const uniqueLevels = [...new Set(harmonicLevels)].sort((a, b) => a - b);
-    
-    // Добавляем линии для каждой реконструкции
-    uniqueLevels.forEach((harmCount, index) => {
-      const isCurrentSelected = harmCount === numHarmonics;
-      
-      data.push({
-        x: combinedWaveData.map(point => point.t * 1000),
-        y: combinedWaveData.map(point => point[`harmonic_${harmCount}`]),
-        type: 'scatter' as const,
-        mode: 'lines' as const,
-        name: `${harmCount} гармоник${harmCount > 4 ? "" : "и"}`,
-        line: {
-          color: colors[index % colors.length],
-          width: isCurrentSelected ? 2 : 1.5,
-          dash: isCurrentSelected ? 'solid' : 'dash',
-          shape: 'spline' // Добавляем сглаживание для всех линий
-        }
-      });
-    });
-    
-    return data;
-  }, [combinedWaveData, numHarmonics, SCIENTIFIC_COLORS]);
+    }
+  ];
+  
+  // Добавляем реконструкцию только с выбранным количеством гармоник
+  data.push({
+    x: combinedWaveData.map(point => point.t * 1000),
+    y: combinedWaveData.map(point => point[`harmonic_${numHarmonics}`]),
+    type: 'scatter' as const,
+    mode: 'lines' as const,
+    name: `${numHarmonics} гармоник${numHarmonics > 4 ? "" : "и"}`,
+    line: {
+      color: SCIENTIFIC_COLORS.secondary,
+      width: 2,
+      dash: 'solid',
+      shape: 'spline' // Добавляем сглаживание для линии
+    }
+  });
+  
+  return data;
+}, [combinedWaveData, numHarmonics, SCIENTIFIC_COLORS]);
 
   // Layout for wave visualization
   const waveLayout = useMemo((): Partial<Layout> => {
@@ -1029,46 +1011,7 @@ const WaveAnalyzer: React.FC = () => {
             </div>
           )}
           
-          <div className="bg-[var(--card-bg)] p-4 rounded-lg shadow border mt-4">
-            <h3 className="text-lg font-semibold mb-3">Сравнение аппроксимаций</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Этот график показывает как увеличение количества гармоник улучшает 
-              качество аппроксимации исходного сигнала.
-            </p>
-            
-            <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                  {multiHarmonicReconstructions.map((recon, index) => (
-                    <div key={recon.harmonics} className="flex items-center">
-                      <span 
-                        className="inline-block w-4 h-1 mr-1" 
-                        style={{
-                          backgroundColor: index === multiHarmonicReconstructions.length - 1 
-                            ? SCIENTIFIC_COLORS.secondary 
-                            : ['#3182CE', '#F6AD55', '#68D391', '#4FD1C5', '#F687B3'][index % 5]
-                        }}
-                      ></span>
-                      <span className="text-xs">{recon.harmonics}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-xs text-gray-500">
-                  {waveType === 'Синусоида' 
-                    ? 'Синусоида - идеальная с 1 гармоникой'
-                    : `${
-                        waveType === 'Прямоугольная' 
-                          ? 'Нечетные гармоники (1/n)' 
-                          : waveType === 'Пилообразная'
-                            ? 'Все гармоники (1/n)'
-                            : 'Нечетные гармоники (1/n²)'
-                      }`
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-          
+
           <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-300">
             <h3 className="font-medium text-gray-800 mb-2">Интерпретация гармонического анализа:</h3>
             <p className="mb-2">
