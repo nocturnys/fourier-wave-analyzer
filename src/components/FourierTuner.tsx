@@ -127,7 +127,7 @@ const FourierTuner: React.FC = () => {
       
       // Подготовка данных для спектра
       const frequencyBinCount = analyser.frequencyBinCount;
-      const freqData = new Float32Array(frequencyBinCount);
+    //   const freqData = new Float32Array(frequencyBinCount);
       
       // Создаем оси частот для спектра
       const sampleRate = context.sampleRate;
@@ -533,7 +533,7 @@ const FourierTuner: React.FC = () => {
     },
     yaxis: {
       title: 'Амплитуда',
-      type: 'log' as 'log' // Логарифмическая шкала для лучшей видимости
+      type: 'log' as const // Логарифмическая шкала для лучшей видимости
     },
     height: 300,
     margin: { l: 60, r: 30, t: 50, b: 50 }
@@ -761,10 +761,9 @@ const FourierTuner: React.FC = () => {
         <div className="mt-6">
           <h3 className="font-medium mb-2">Как пользоваться этим инструментом:</h3>
           <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-700">
-            <li>Нажмите кнопку "Начать анализ" и разрешите доступ к микрофону</li>
+            <li>Нажмите кнопку Начать анализ и разрешите доступ к микрофону</li>
             <li>Извлеките звук на инструменте</li>
             <li>Изучите спектр звукового сигнала на графике Фурье</li>
-            <li>Посмотрите на гармонический состав – это "отпечаток" тембра</li>
           </ol>
         </div>
       </div>
