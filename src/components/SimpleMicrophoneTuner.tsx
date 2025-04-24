@@ -6,7 +6,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { NOTE_FREQUENCIES, NOTE_NAMES_RU } from '@/constants/noteFrequencies';
+import { NOTE_NAMES_RU } from '@/constants/noteFrequencies';
 
 // Определяем типы для использования webkitAudioContext
 declare global {
@@ -28,7 +28,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
   const [error, setError] = useState('');
   const [volume, setVolume] = useState(0);
   const [detectedNote, setDetectedNote] = useState<DetectedNote | null>(null);
-  const [referenceFrequency, setReferenceFrequency] = useState(440); // A4 = 440Hz
+  const [referenceFrequency] = useState(440); // A4 = 440Hz
 
   // Рефы для аудио-объектов
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -58,9 +58,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
       console.log("Запуск тюнера...");
       
       // Создание нового аудио контекста
-      const AudioContextClass = window.AudioContext || 
-                               // @ts-ignore - Игнорируем проблему типизации для webkitAudioContext
-                               window.webkitAudioContext;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
                                
       if (!AudioContextClass) {
         throw new Error('Ваш браузер не поддерживает Web Audio API');
@@ -620,7 +618,7 @@ const SimpleMicrophoneTuner: React.FC = () => {
                 <svg className="mx-auto w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 01-.707-7.07m-2.122 9.9a9 9 0 010-12.728"></path>
                 </svg>
-                <p className="mt-4 text-xl">Нажмите "Начать настройку" для активации микрофона</p>
+                <p className="mt-4 text-xl">Нажмите Начать настройку для активации микрофона</p>
               </>
             )}
           </div>
@@ -632,11 +630,11 @@ const SimpleMicrophoneTuner: React.FC = () => {
         <h2 className="text-xl font-semibold mb-4">Как пользоваться тюнером</h2>
         
         <ol className="list-decimal pl-5 space-y-2">
-          <li>Нажмите кнопку "Начать настройку" и разрешите доступ к микрофону</li>
-          <li>Извлеките звук на вашем инструменте (сыграйте ноту)</li>
-          <li>Тюнер определит ближайшую ноту и покажет, насколько точно она настроена</li>
+          <li>Нажмите кнопку Начать настройку и разрешите доступ к микрофону</li>
+          <li>Извлеките звук на вашем инструменте</li>
+          <li>Тюнер определит ближайшую ноту и покажет насколько точно она настроена</li>
           <li>Следуйте указаниям стрелок для корректировки настройки</li>
-          {/* <li>При необходимости, настройте эталонную частоту A4 (по умолчанию 440 Гц)</li> */}
+          
         </ol>
         
         <div className="mt-4 text-sm text-gray-600">
